@@ -1,5 +1,3 @@
-use std::io::Read;
-
 use crate::error::ReadError;
 
 #[derive(Debug)]
@@ -28,7 +26,7 @@ impl Foot {
         &mut self.checksum
     }
 
-    pub fn read(reader: &mut impl Read) -> Result<Self, ReadError> {
+    pub fn read(bytes: &[u8]) -> Result<Self, ReadError> {
         todo!()
     }
 }

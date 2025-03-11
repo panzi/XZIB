@@ -5,7 +5,7 @@ pub mod format;
 pub mod error;
 pub mod io;
 
-use std::io::{Cursor, Read};
+use std::io::{Read, Seek};
 
 use chunks::{Body, Foot, Indx, Meta, Xmet};
 use error::{IllegalDate, ReadError, ReadErrorKind};
@@ -136,7 +136,8 @@ impl XZIB {
         self.foot.as_ref()
     }
 
-    pub fn read(reader: &mut impl Read) -> Result<Self, ReadError> {
+    pub fn read<R>(reader: &mut R) -> Result<Self, ReadError>
+    where R: Read + Seek {
         let head = Head::read(reader)?;
 
         if head.channels() == 0 {
@@ -206,13 +207,13 @@ impl XZIB {
                     meta = Some(Meta::read(chunk_data)?);
                 }
                 b"XMET" => {
-                    xmet = Some(Xmet::read(&mut Cursor::new(chunk_data))?);
+                    xmet = Some(Xmet::read(chunk_data)?);
                 }
                 b"BODY" => {
-                    body = Some(Body::read(&mut Cursor::new(chunk_data), &head)?);
+                    body = Some(Body::read(chunk_data, &head)?);
                 }
                 b"FOOT" => {
-                    foot = Some(Foot::read(&mut Cursor::new(chunk_data))?);
+                    foot = Some(Foot::read(chunk_data)?);
                 }
                 _ => {
                     eprintln!("ignored unknown chunk: {:?}", fourcc);

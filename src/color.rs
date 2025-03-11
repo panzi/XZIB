@@ -297,7 +297,9 @@ pub fn read_colors_variant_inner<C: ChannelValue>(bytes: &[u8], channels: u8) ->
         1 => Ok(ColorVariant::L(read_colors(bytes))),
         3 => Ok(ColorVariant::Rgb(read_colors(bytes))),
         4 => Ok(ColorVariant::Rgba(read_colors(bytes))),
-        _ => Err(ReadError::with_message(ReadErrorKind::BrokenFile, format!("illegal number of channels: {channels}")))
+        _ => Err(ReadError::with_message(
+            ReadErrorKind::BrokenFile,
+            format!("illegal number of channels: {channels}")))
     }
 }
 
@@ -364,6 +366,7 @@ pub fn read_colors_variant(bytes: &[u8], is_float: bool, depth: u8, channels: u8
             }
         }
         4 if !is_float => {
+            // TODO: propper color mapping
             match channels {
                 1 => {
                     let color_count = bytes.len() * 2;
@@ -426,7 +429,7 @@ pub fn read_colors_variant(bytes: &[u8], is_float: bool, depth: u8, channels: u8
         _ => {
             return Err(ReadError::with_message(
                 ReadErrorKind::BrokenFile,
-                format!("unsupported channel format: {} {depth}", if is_float { "float" } else { "int" })
+                format!("unsupported color format: {} {depth}", if is_float { "float" } else { "int" })
             ));
         }
     }

@@ -140,13 +140,13 @@ impl Meta {
                 eprintln!("last meta data entry not NUL terminated");
                 data
             };
-            data = &data[chunk.len()..];
+            data = &data[chunk.len() + 1..];
 
             let value = match str::from_utf8(chunk) {
                 Ok(value) => value,
                 Err(err) => return Err(ReadError::with_all(
                     ReadErrorKind::BrokenFile,
-                    format!("illegal UTF-8 bytes: {chunk:?}"),
+                    format!("illegal UTF-8 bytes in meta data value: {chunk:?}"),
                     Box::new(err)))
             };
             let Ok(key) = MetaKey::try_from(key) else {
