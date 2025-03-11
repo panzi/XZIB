@@ -1,30 +1,33 @@
 macro_rules! make_error {
-    ($error_name:ident) => {
+    ($error_name:ident $({ $($field:ident: $field_type:ident $(:: $field_type_tail:ident)*),* $(,)? })?) => {
         #[derive(Debug)]
         pub struct $error_name {
+            $(
+                $($field: $field_type $(:: $field_type_tail)*, )*
+            )?
             message: Option<String>,
             source: Option<Box<dyn std::error::Error>>,
         }
 
         impl $error_name {
             #[inline]
-            pub fn new() -> Self {
-                Self { message: None, source: None }
+            pub fn new($($($field: $field_type $(:: $field_type_tail)*, )*)?) -> Self {
+                Self { $($($field,)*)? message: None, source: None }
             }
 
             #[inline]
-            pub fn with_message(message: impl Into<String>) -> Self {
-                Self { message: Some(message.into()), source: None }
+            pub fn with_message($($($field: $field_type $(:: $field_type_tail)*, )*)? message: impl Into<String>) -> Self {
+                Self { $($($field,)*)? message: Some(message.into()), source: None }
             }
 
             #[inline]
-            pub fn with_source(source: Box<dyn std::error::Error>) -> Self {
-                Self { message: None, source: Some(source) }
+            pub fn with_source($($($field: $field_type $(:: $field_type_tail)*, )*)? source: Box<dyn std::error::Error>) -> Self {
+                Self { $($($field,)*)? message: None, source: Some(source) }
             }
 
             #[inline]
-            pub fn with_all(message: impl Into<String>, source: Box<dyn std::error::Error>) -> Self {
-                Self { message: Some(message.into()), source: Some(source) }
+            pub fn with_all($($($field: $field_type $(:: $field_type_tail)*, )*)? message: impl Into<String>, source: Box<dyn std::error::Error>) -> Self {
+                Self { $($($field,)*)? message: Some(message.into()), source: Some(source) }
             }
 
             #[inline]
@@ -34,6 +37,13 @@ macro_rules! make_error {
                 };
                 Some(message)
             }
+
+            $($(
+                #[inline]
+                pub fn $field(&self) -> $field_type $(:: $field_type_tail)* {
+                    self.$field
+                }
+            )*)?
         }
 
         impl std::fmt::Display for $error_name {
@@ -61,33 +71,36 @@ macro_rules! make_error {
         }
     };
 
-    ($error_name:ident $kind_name:ident $(impl $impl_kind_value:ident : $err_head:ident $(:: $err_tail:ident)*; )*) => {
+    ($error_name:ident $({ $($field:ident: $field_type:ident $(:: $field_type_tail:ident)*),* $(,)? })? $kind_name:ident $(impl $impl_kind_value:ident : $err_head:ident $(:: $err_tail:ident)*; )*) => {
         #[derive(Debug)]
         pub struct $error_name {
             kind: $kind_name,
+            $(
+                $($field: $field_type $(:: $field_type_tail)*, )*
+            )?
             message: Option<String>,
             source: Option<Box<dyn std::error::Error>>,
         }
 
         impl $error_name {
             #[inline]
-            pub fn new(kind: $kind_name) -> Self {
-                Self { kind, message: None, source: None }
+            pub fn new(kind: $kind_name $(, $($field: $field_type $(:: $field_type_tail)*)*)?) -> Self {
+                Self { kind, $($($field,)*)? message: None, source: None }
             }
 
             #[inline]
-            pub fn with_message(kind: $kind_name, message: impl Into<String>) -> Self {
-                Self { kind, message: Some(message.into()), source: None }
+            pub fn with_message(kind: $kind_name $(, $($field: $field_type $(:: $field_type_tail)*)*)?, message: impl Into<String>) -> Self {
+                Self { kind, $($($field,)*)? message: Some(message.into()), source: None }
             }
 
             #[inline]
-            pub fn with_source(kind: $kind_name, source: Box<dyn std::error::Error>) -> Self {
-                Self { kind, message: None, source: Some(source) }
+            pub fn with_source(kind: $kind_name $(, $($field: $field_type $(:: $field_type_tail)*)*)?, source: Box<dyn std::error::Error>) -> Self {
+                Self { kind, $($($field,)*)? message: None, source: Some(source) }
             }
 
             #[inline]
-            pub fn with_all(kind: $kind_name, message: impl Into<String>, source: Box<dyn std::error::Error>) -> Self {
-                Self { kind, message: Some(message.into()), source: Some(source) }
+            pub fn with_all(kind: $kind_name $(, $($field: $field_type $(:: $field_type_tail)*)*)?, message: impl Into<String>, source: Box<dyn std::error::Error>) -> Self {
+                Self { kind, $($($field,)*)? message: Some(message.into()), source: Some(source) }
             }
 
             #[inline]
@@ -102,6 +115,13 @@ macro_rules! make_error {
                 };
                 Some(message)
             }
+
+            $($(
+                #[inline]
+                pub fn $field(&self) -> $field_type $(:: $field_type_tail)* {
+                    self.$field
+                }
+            )*)?
         }
 
         impl std::fmt::Display for $error_name {
@@ -130,13 +150,13 @@ macro_rules! make_error {
         make_error! { @impl $error_name $kind_name $(impl $impl_kind_value : $err_head $(:: $err_tail)*; )* }
     };
 
-    ($error_name:ident $kind_name:ident { $($kind_value:ident),* $(,)? } $(impl $impl_kind_value:ident : $err_head:ident $(:: $err_tail:ident)*; )*) => {
+    ($error_name:ident $({ $($field:ident: $field_type:ident $(:: $field_type_tail:ident)*),* $(,)? })? $kind_name:ident { $($kind_value:ident),* $(,)? } $(impl $impl_kind_value:ident : $err_head:ident $(:: $err_tail:ident)*; )*) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub enum $kind_name {
             $($kind_value),*
         }
 
-        make_error! { $error_name $kind_name $(impl $impl_kind_value : $err_head $(:: $err_tail)*; )* }
+        make_error! { $error_name $({ $($field: $field_type $(:: $field_type_tail)*,)* })? $kind_name $(impl $impl_kind_value : $err_head $(:: $err_tail)*; )* }
     };
 
     (@impl $error_name:ident $kind_name:ident) => {};
@@ -159,4 +179,14 @@ make_error! {
         BrokenFile,
     }
     impl IO: std::io::Error;
+}
+
+make_error! {
+    IllegalMetaKey {
+        key: u8
+    }
+}
+
+make_error! {
+    IllegalDate
 }

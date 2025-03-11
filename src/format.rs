@@ -31,6 +31,31 @@ impl ChannelValueType {
             }
         }
     }
+
+    #[inline]
+    pub fn planes(self) -> u8 {
+        match self {
+            Self::U8 => 8,
+            Self::U16 => 16,
+            Self::U32 | Self::F32 => 32,
+            Self::U64 | Self::F64 => 64,
+            Self::U128 => 128,
+        }
+    }
+
+    #[inline]
+    pub fn number_type(self) -> NumberType {
+        match self {
+            Self::U8 |
+            Self::U16 |
+            Self::U32 |
+            Self::U64 |
+            Self::U128 => NumberType::Integer,
+
+            Self::F32 |
+            Self::F64 => NumberType::Float
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,6 +71,15 @@ impl ColorType {
             3 => Some(Self::RGB),
             4 => Some(Self::RGBA),
             _ => None,
+        }
+    }
+
+    #[inline]
+    pub fn channels(self) -> u8 {
+        match self {
+            Self::L    => 1,
+            Self::RGB  => 3,
+            Self::RGBA => 4,
         }
     }
 }

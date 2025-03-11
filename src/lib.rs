@@ -8,7 +8,7 @@ pub mod io;
 use std::io::{Cursor, Read};
 
 use chunks::{Body, Foot, Indx, Meta, Xmet};
-use error::{ReadError, ReadErrorKind};
+use error::{IllegalDate, ReadError, ReadErrorKind};
 use flate2::bufread::ZlibDecoder;
 use io::{read_fourcc, read_u32, read_u64, read_u8};
 
@@ -139,6 +139,20 @@ impl XZIB {
     pub fn read(reader: &mut impl Read) -> Result<Self, ReadError> {
         let head = Head::read(reader)?;
 
+        if head.channels() == 0 {
+            return Err(ReadError::with_message(
+                ReadErrorKind::BrokenFile,
+                format!("channels == 0")
+            ));
+        }
+
+        if head.planes() == 0 {
+            return Err(ReadError::with_message(
+                ReadErrorKind::BrokenFile,
+                format!("planes == 0")
+            ));
+        }
+
         let mut indx: Option<Indx> = None;
         let mut meta: Option<Meta> = None;
         let mut xmet: Option<Xmet> = None;
@@ -186,10 +200,10 @@ impl XZIB {
 
             match &fourcc {
                 b"INDX" => {
-                    indx = Some(Indx::read(&chunk_data, &head)?);
+                    indx = Some(Indx::read(chunk_data, &head)?);
                 }
                 b"META" => {
-                    meta = Some(Meta::read(&mut Cursor::new(chunk_data))?);
+                    meta = Some(Meta::read(chunk_data)?);
                 }
                 b"XMET" => {
                     xmet = Some(Xmet::read(&mut Cursor::new(chunk_data))?);
@@ -217,7 +231,7 @@ impl XZIB {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
 pub struct Date {
     year: u16,
     month: u8,
@@ -273,5 +287,35 @@ impl Date {
     #[inline]
     pub fn is_null(&self) -> bool {
         (self.year & self.month as u16 & self.day as u16) == 0
+    }
+
+    pub fn parse(value: &str) -> Result<Date, IllegalDate> {
+        let mut iter = value.split('-');
+
+        let Some(year) = iter.next() else {
+            return Err(IllegalDate::with_message(format!("illegal date: {value:?}")));
+        };
+        let Some(month) = iter.next() else {
+            return Err(IllegalDate::with_message(format!("illegal date: {value:?}")));
+        };
+        let Some(day) = iter.next() else {
+            return Err(IllegalDate::with_message(format!("illegal date: {value:?}")));
+        };
+
+        if let Some(_) = iter.next() {
+            return Err(IllegalDate::with_message(format!("illegal date: {value:?}")));
+        }
+
+        let Ok(year) = year.parse() else {
+            return Err(IllegalDate::with_message(format!("illegal date: {value:?}")));
+        };
+        let Ok(month) = month.parse() else {
+            return Err(IllegalDate::with_message(format!("illegal date: {value:?}")));
+        };
+        let Ok(day) = day.parse() else {
+            return Err(IllegalDate::with_message(format!("illegal date: {value:?}")));
+        };
+
+        Ok(Self { year, month, day })
     }
 }
