@@ -1,6 +1,9 @@
 use core::str;
+use std::io::Write;
 
-use crate::{error::{IllegalMetaKey, ReadError, ReadErrorKind}, Date};
+use crate::{error::{IllegalMetaKey, ReadError, ReadErrorKind}, Date, Head};
+
+use super::ChunkWrite;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
@@ -46,6 +49,8 @@ pub struct Meta {
 }
 
 impl Meta {
+    pub const FOURCC: [u8; 4] = *b"META";
+
     #[inline]
     pub fn title(&self) -> &str {
         &self.title
@@ -192,7 +197,56 @@ impl Meta {
             author,
             comment,
             license,
-            links
+            links,
         })
+    }
+    
+    pub fn write(&self, writer: &mut impl Write) -> std::io::Result<()> {
+        if !self.title.is_empty() {
+            writer.write_all(&[MetaKey::Title as u8])?;
+            writer.write_all(self.title.as_bytes())?;
+            writer.write_all(&[0])?;
+        }
+
+        if !self.created_at.is_null() {
+            writer.write_all(&[MetaKey::CreatedAt as u8])?;
+            write!(writer, "{}", self.created_at)?;
+            writer.write_all(&[0])?;
+        }
+
+        for author in &self.author {
+            writer.write_all(&[MetaKey::Author as u8])?;
+            writer.write_all(author.as_bytes())?;
+            writer.write_all(&[0])?;
+        }
+
+        if !self.comment.is_empty() {
+            writer.write_all(&[MetaKey::Comment as u8])?;
+            writer.write_all(self.comment.as_bytes())?;
+            writer.write_all(&[0])?;
+        }
+
+        for license in &self.license {
+            writer.write_all(&[MetaKey::License as u8])?;
+            writer.write_all(license.as_bytes())?;
+            writer.write_all(&[0])?;
+        }
+
+        for links in &self.links {
+            writer.write_all(&[MetaKey::Links as u8])?;
+            writer.write_all(links.as_bytes())?;
+            writer.write_all(&[0])?;
+        }
+
+        Ok(())
+    }
+}
+
+impl ChunkWrite for Meta {
+    const FOURCC: [u8; 4] = Self::FOURCC;
+
+    #[inline]
+    fn write(&self, _head: &Head, writer: &mut impl Write) -> std::io::Result<()> {
+        self.write(writer)
     }
 }

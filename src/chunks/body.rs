@@ -1,4 +1,8 @@
+use std::io::Write;
+
 use crate::{color::{read_colors_variant, ChannelVariant, ColorList, ColorVariant, ColorVecDataInner, IntChannelValue, Rgb, Rgba}, error::{ReadError, ReadErrorKind}, format::Format, Head};
+
+use super::ChunkWrite;
 
 #[derive(Debug)]
 pub struct Body {
@@ -6,6 +10,8 @@ pub struct Body {
 }
 
 impl Body {
+    pub const FOURCC: [u8; 4] = *b"BODY";
+
     #[inline]
     pub fn new(format: Format) -> Self {
         Self { data: format.make_color_list() }
@@ -34,8 +40,20 @@ impl Body {
             data
         })
     }
+
+    pub fn write(&self, head: &Head, writer: &mut impl Write) -> std::io::Result<()> {
+        todo!()
+    }
 }
 
+impl ChunkWrite for Body {
+    const FOURCC: [u8; 4] = Self::FOURCC;
+
+    #[inline]
+    fn write(&self, head: &Head, writer: &mut impl Write) -> std::io::Result<()> {
+        self.write(head, writer)
+    }
+}
 
 // color mapping https://threadlocalmutex.com/?p=60 https://threadlocalmutex.com/?p=48
 // XXX: however, I just shift it instead

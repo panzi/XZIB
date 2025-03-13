@@ -5,11 +5,11 @@ pub mod format;
 pub mod error;
 pub mod io;
 
-use std::io::{Read, Seek};
+use std::io::{Read, Seek, Write};
 
-use chunks::{Body, Foot, Indx, Meta, Xmet};
+use chunks::{Body, ChunkWrite, Foot, Indx, Meta, Xmet};
 use error::{IllegalDate, ReadError, ReadErrorKind};
-use flate2::bufread::ZlibDecoder;
+use flate2::{bufread::ZlibDecoder, write::ZlibEncoder, Compression};
 use io::{read_fourcc, read_u32, read_u64, read_u8};
 
 #[derive(Debug)]
@@ -87,6 +87,22 @@ impl Head {
             width,
             height,
         })
+    }
+
+    pub fn write(&self, writer: &mut impl Write) -> std::io::Result<()> {
+        writer.write_all(&XZIB::FOURCC)?;
+
+        writer.write_all(&[
+            self.flags,
+            self.channels,
+            self.planes,
+            self.index_planes,
+        ])?;
+
+        writer.write_all(&self.width.to_le_bytes())?;
+        writer.write_all(&self.height.to_le_bytes())?;
+
+        Ok(())
     }
 }
 
@@ -199,20 +215,20 @@ impl XZIB {
                 fourcc[3],
             ];
 
-            match &fourcc {
-                b"INDX" => {
+            match fourcc {
+                Indx::FOURCC => {
                     indx = Some(Indx::read(chunk_data, &head)?);
                 }
-                b"META" => {
+                Meta::FOURCC => {
                     meta = Some(Meta::read(chunk_data)?);
                 }
-                b"XMET" => {
+                Xmet::FOURCC => {
                     xmet = Some(Xmet::read(chunk_data)?);
                 }
-                b"BODY" => {
+                Body::FOURCC => {
                     body = Some(Body::read(chunk_data, &head)?);
                 }
-                b"FOOT" => {
+                Foot::FOURCC => {
                     foot = Some(Foot::read(chunk_data)?);
                 }
                 _ => {
@@ -229,6 +245,58 @@ impl XZIB {
             body,
             foot,
         })
+    }
+
+    pub fn write(&self, writer: &mut impl Write, compression: Compression) -> std::io::Result<()> {
+        self.head.write(writer)?;
+
+        let mut buf = Vec::new();
+
+        if let Some(indx) = &self.indx {
+            self.write_chunk(&mut buf, writer, indx, compression)?;
+        }
+
+        if let Some(meta) = &self.meta {
+            self.write_chunk(&mut buf, writer, meta, compression)?;
+        }
+
+        if let Some(xmet) = &self.xmet {
+            self.write_chunk(&mut buf, writer, xmet, compression)?;
+        }
+
+        if let Some(body) = &self.body {
+            self.write_chunk(&mut buf, writer, body, compression)?;
+        }
+
+        if let Some(foot) = &self.foot {
+            // TODO: pipe all writes through a writer that calculates the checksum!
+            self.write_chunk(&mut buf, writer, foot, compression)?;
+        }
+
+        Ok(())
+    }
+
+    fn write_chunk(&self, mut buf: &mut Vec<u8>, writer: &mut impl Write, chunk: &impl ChunkWrite, compression: Compression) -> std::io::Result<()> {
+        buf.clear();
+        let mut fourcc = Indx::FOURCC;
+        if compression.level() > 0 {
+            let mut encoder = ZlibEncoder::new(&mut buf, compression);
+            chunk.write(&self.head, &mut encoder)?;
+            fourcc[1] = fourcc[1].to_ascii_lowercase();
+        } else {
+            chunk.write(&self.head, buf)?;
+        }
+
+        if buf.len() <= u32::MAX as usize {
+            fourcc[0] = fourcc[0].to_ascii_lowercase();
+            writer.write_all(&fourcc)?;
+            writer.write_all(&(buf.len() as u32).to_le_bytes())?;
+        } else {
+            writer.write_all(&fourcc)?;
+            writer.write_all(&(buf.len() as u64).to_le_bytes())?;
+        }
+
+        writer.write_all(&buf)
     }
 }
 
@@ -318,5 +386,12 @@ impl Date {
         };
 
         Ok(Self { year, month, day })
+    }
+}
+
+impl std::fmt::Display for Date {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:04}-{:02}-{:02}", self.year, self.month, self.day)
     }
 }

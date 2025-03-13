@@ -1,7 +1,9 @@
 use core::str;
-use std::collections::HashMap;
+use std::{collections::HashMap, io::Write};
 
-use crate::error::{ReadError, ReadErrorKind};
+use crate::{error::{ReadError, ReadErrorKind}, Head};
+
+use super::ChunkWrite;
 
 
 #[derive(Debug)]
@@ -10,6 +12,8 @@ pub struct Xmet {
 }
 
 impl Xmet {
+    pub const FOURCC: [u8; 4] = *b"XMET";
+
     #[inline]
     pub fn data(&self) -> &HashMap<String, Vec<String>> {
         &self.data
@@ -68,5 +72,27 @@ impl Xmet {
         Ok(Self {
             data
         })
+    }
+
+    pub fn write(&self, writer: &mut impl Write) -> std::io::Result<()> {
+        for (key, values) in &self.data {
+            for value in values {
+                writer.write_all(key.as_bytes())?;
+                writer.write_all(&[0])?;
+
+                writer.write_all(value.as_bytes())?;
+                writer.write_all(&[0])?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl ChunkWrite for Xmet {
+    const FOURCC: [u8; 4] = Self::FOURCC;
+
+    #[inline]
+    fn write(&self, _head: &Head, writer: &mut impl Write) -> std::io::Result<()> {
+        self.write(writer)
     }
 }

@@ -1,4 +1,8 @@
-use crate::error::{ReadError, ReadErrorKind};
+use std::io::Write;
+
+use crate::{error::{ReadError, ReadErrorKind}, Head};
+
+use super::ChunkWrite;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Checksum {
@@ -98,6 +102,8 @@ pub struct Foot {
 }
 
 impl Foot {
+    pub const FOURCC: [u8; 4] = *b"FOOT";
+
     #[inline]
     pub fn checksum(&self) -> &Checksum {
         &self.checksum
@@ -137,5 +143,38 @@ impl Foot {
         };
 
         Ok(Self { checksum })
+    }
+
+    pub fn write(&self, writer: &mut impl Write) -> std::io::Result<()> {
+        writer.write_all(&[self.checksum.checksum_type() as u8])?;
+        match &self.checksum {
+            Checksum::Crc32(value) => {
+                writer.write_all(&value.to_le_bytes())
+            }
+            Checksum::Sha1(data) => {
+                writer.write_all(data.as_ref())
+            }
+            Checksum::Sha224(data) => {
+                writer.write_all(data.as_ref())
+            }
+            Checksum::Sha256(data) => {
+                writer.write_all(data.as_ref())
+            }
+            Checksum::Sha384(data) => {
+                writer.write_all(data.as_ref())
+            }
+            Checksum::Sha512(data) => {
+                writer.write_all(data.as_ref())
+            }
+        }
+    }
+}
+
+impl ChunkWrite for Foot {
+    const FOURCC: [u8; 4] = Self::FOURCC;
+
+    #[inline]
+    fn write(&self, _head: &Head, writer: &mut impl Write) -> std::io::Result<()> {
+        self.write(writer)
     }
 }

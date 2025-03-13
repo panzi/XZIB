@@ -1,4 +1,8 @@
+use std::io::Write;
+
 use crate::{color::{read_colors_variant, ColorList}, error::{ReadError, ReadErrorKind}, Head};
+
+use super::ChunkWrite;
 
 #[derive(Debug)]
 pub struct Indx {
@@ -6,6 +10,8 @@ pub struct Indx {
 }
 
 impl Indx {
+    pub const FOURCC: [u8; 4] = *b"INDX";
+
     #[inline]
     pub fn colors(&self) -> &ColorList {
         &self.colors
@@ -28,5 +34,18 @@ impl Indx {
         let colors = read_colors_variant(data, head.is_float(), head.index_planes(), head.channels())?;
 
         Ok(Self { colors })
+    }
+
+    pub fn write(&self, head: &Head, writer: &mut impl Write) -> std::io::Result<()> {
+        todo!()
+    }
+}
+
+impl ChunkWrite for Indx {
+    const FOURCC: [u8; 4] = Self::FOURCC;
+
+    #[inline]
+    fn write(&self, head: &Head, writer: &mut impl Write) -> std::io::Result<()> {
+        self.write(head, writer)
     }
 }
