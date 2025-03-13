@@ -1,5 +1,5 @@
-eXperimental Zlib compressed Iterleaved Bitmap format
-=====================================================
+eXperimental Zlib compressed Interleaved Bitmap format
+======================================================
 
 These are just my experiments with zlib compression and interleaved bitmaps. I
 just want to check how well that compresses. In any case this doesn't support
