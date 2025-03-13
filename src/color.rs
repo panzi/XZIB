@@ -357,14 +357,14 @@ pub fn read_colors_variant(bytes: &[u8], is_float: bool, depth: u8, channels: u8
                 1 => {
                     let mut colors = Vec::with_capacity(bytes.len() * 8);
                     for byte in bytes {
-                        colors.push(((byte >> 0) & 1) * 255u8);
-                        colors.push(((byte >> 1) & 1) * 255u8);
-                        colors.push(((byte >> 2) & 1) * 255u8);
-                        colors.push(((byte >> 3) & 1) * 255u8);
-                        colors.push(((byte >> 4) & 1) * 255u8);
-                        colors.push(((byte >> 5) & 1) * 255u8);
-                        colors.push(((byte >> 6) & 1) * 255u8);
-                        colors.push(((byte >> 7) & 1) * 255u8);
+                        colors.push(((byte >> 0) & 1) * 255);
+                        colors.push(((byte >> 1) & 1) * 255);
+                        colors.push(((byte >> 2) & 1) * 255);
+                        colors.push(((byte >> 3) & 1) * 255);
+                        colors.push(((byte >> 4) & 1) * 255);
+                        colors.push(((byte >> 5) & 1) * 255);
+                        colors.push(((byte >> 6) & 1) * 255);
+                        colors.push(((byte >> 7) & 1) * 255);
                     }
                     Ok(ChannelVariant::U8(ColorVariant::L(colors)))
                 },
@@ -401,7 +401,7 @@ pub fn read_colors_variant(bytes: &[u8], is_float: bool, depth: u8, channels: u8
                     let color_count = bytes.len() * 2;
                     let mut colors = Vec::with_capacity(color_count);
                     for offset in 0..color_count {
-                        let v = get_nibble(bytes, offset) * 17;
+                        let v = get_nibble(bytes, offset) << 4;
                         colors.push(v);
                     }
                     Ok(ChannelVariant::U8(ColorVariant::L(colors)))
@@ -410,9 +410,9 @@ pub fn read_colors_variant(bytes: &[u8], is_float: bool, depth: u8, channels: u8
                     let color_count = (bytes.len() * 2) / 3;
                     let mut colors = Vec::with_capacity(color_count);
                     for offset in (0..(color_count * 3)).step_by(3) {
-                        let r = get_nibble(bytes, offset + 0) * 17;
-                        let g = get_nibble(bytes, offset + 1) * 17;
-                        let b = get_nibble(bytes, offset + 2) * 17;
+                        let r = get_nibble(bytes, offset + 0) << 4;
+                        let g = get_nibble(bytes, offset + 1) << 4;
+                        let b = get_nibble(bytes, offset + 2) << 4;
                         colors.push(Rgb([r, g, b]));
                     }
                     Ok(ChannelVariant::U8(ColorVariant::Rgb(colors)))
@@ -421,10 +421,10 @@ pub fn read_colors_variant(bytes: &[u8], is_float: bool, depth: u8, channels: u8
                     let color_count = (bytes.len() * 2) / 4;
                     let mut colors = Vec::with_capacity(color_count);
                     for offset in (0..(color_count * 4)).step_by(4) {
-                        let r = get_nibble(bytes, offset + 0) * 17;
-                        let g = get_nibble(bytes, offset + 1) * 17;
-                        let b = get_nibble(bytes, offset + 2) * 17;
-                        let a = get_nibble(bytes, offset + 3) * 17;
+                        let r = get_nibble(bytes, offset + 0) << 4;
+                        let g = get_nibble(bytes, offset + 1) << 4;
+                        let b = get_nibble(bytes, offset + 2) << 4;
+                        let a = get_nibble(bytes, offset + 3) << 4;
                         colors.push(Rgba([r, g, b, a]));
                     }
                     Ok(ChannelVariant::U8(ColorVariant::Rgba(colors)))

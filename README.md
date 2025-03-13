@@ -166,19 +166,19 @@ use whatever value the bits before have in order to reduce entropy.
 
 #### `foot` Chunk
 
-Has to be the last chunk.
+Optional. Has to be the last chunk.
 
 | Offset | Type    | Name            | Description   |
 | -----: | :------ | :-------------- | :------------ |
 |      0 | `U8`    | `checksum_type` | See below.    |
 |      1 | `U8[?]` | `checksum`      | Checksum of the whole file up to, but not including the `foot` chunk. |
 
-| Checksum Type | Payload Length | Name    |
-| ------------: | -------------: | :------ |
-|             0 |              4 | CRC32   |
-|             1 |             20 | SHA-1   |
-|             2 |             28 | SHA-224 |
-|             3 |             32 | SHA-256 |
-|             4 |             48 | SHA-384 |
-|             5 |             64 | SHA-512 |
+| Checksum Type | Payload Length | Name         |
+| ------------: | -------------: | :----------- |
+|             1 |              4 | CRC32        |
+|             2 |             20 | SHA-1        |
+|             3 |             28 | SHA-224      |
+|             4 |             32 | SHA-256      |
+|             5 |             48 | SHA-384      |
+|             6 |             64 | SHA-512      |
 

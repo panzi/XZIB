@@ -98,6 +98,10 @@ pub fn read_interleaved_colors(bytes: &[u8], is_float: bool, planes: u8, channel
         return Err(ReadError::with_message(
             ReadErrorKind::BrokenFile,
             format!("unsupported color format: {} {planes}", if is_float { "float" } else { "int" })));
+    } else if planes == 1 {
+        // special case for 1-bit black and white images
+        // here the bits aren't just shifted to the left, but its mapped to 0 or 255
+        Ok(ChannelVariant::U8(read_1bit_colors(bytes, channels, width, height)?))
     } else if planes <= 8 {
         Ok(ChannelVariant::U8(read_interleaved_int_colors(bytes, planes, channels, width, height)?))
     } else if planes <= 16 {
@@ -188,5 +192,75 @@ pub fn read_interleaved_int_color<C: IntChannelValue>(bytes: &[u8], planes: u8, 
         let plane_index = plane_len * plane;
         value |= ((bytes[plane_index + byte_offset] >> bit_offset) << plane).into();
     }
+    value
+}
+
+pub fn read_1bit_colors(bytes: &[u8], channels: u8, width: u32, height: u32) -> Result<ColorVariant<u8, ColorVecDataInner>, ReadError> {
+    let plane_len = (width as usize + 7) / 8;
+    let channel_len = plane_len;
+    let row_len = channel_len * channels as usize;
+    match channels {
+        1 => {
+            let mut data = Vec::with_capacity(width as usize * height as usize);
+            for y in 0..height as usize {
+                let y_offset = y * row_len;
+                let bytes = &bytes[y_offset..];
+
+                for x in 0..width as usize {
+                    data.push(read_1bit_color(bytes, x) * 255);
+                }
+            }
+            Ok(ColorVariant::L(data))
+        }
+        3 => {
+            let mut data = Vec::with_capacity(width as usize * height as usize);
+            for y in 0..height as usize {
+                let y_offset = y * row_len;
+                let reds   = &bytes[y_offset..];
+                let greens = &reds[channel_len..];
+                let blues  = &greens[channel_len..];
+
+                for x in 0..width as usize {
+                    let r = read_1bit_color(reds,   x) * 255;
+                    let g = read_1bit_color(greens, x) * 255;
+                    let b = read_1bit_color(blues,  x) * 255;
+
+                    data.push(Rgb([r, g, b]));
+                }
+            }
+            Ok(ColorVariant::Rgb(data))
+        }
+        4 => {
+            let mut data = Vec::with_capacity(width as usize * height as usize);
+            for y in 0..height as usize {
+                let y_offset = y * row_len;
+                let reds   = &bytes[y_offset..];
+                let greens = &reds[channel_len..];
+                let blues  = &greens[channel_len..];
+                let alphas = &blues[channel_len..];
+
+                for x in 0..width as usize {
+                    let r = read_1bit_color(reds,   x) * 255;
+                    let g = read_1bit_color(greens, x) * 255;
+                    let b = read_1bit_color(blues,  x) * 255;
+                    let a = read_1bit_color(alphas, x) * 255;
+
+                    data.push(Rgba([r, g, b, a]));
+                }
+            }
+            Ok(ColorVariant::Rgba(data))
+        }
+        _ => Err(ReadError::with_message(
+            ReadErrorKind::BrokenFile,
+            format!("illegal number of channels: {channels}")))
+    }
+}
+
+#[inline]
+pub fn read_1bit_color(bytes: &[u8], x: usize) -> u8 {
+    let byte_offset = x / 8;
+    let bit_offset = x % 8;
+    let byte_offset = byte_offset;
+    let value = bytes[byte_offset] >> bit_offset;
     value
 }

@@ -60,7 +60,7 @@ impl ChannelValueType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorType {
-    L, RGB, RGBA
+    L, Rgb, Rgba
 }
 
 impl ColorType {
@@ -68,8 +68,8 @@ impl ColorType {
     pub fn from_channels(channels: u8) -> Option<Self> {
         match channels {
             1 => Some(Self::L),
-            3 => Some(Self::RGB),
-            4 => Some(Self::RGBA),
+            3 => Some(Self::Rgb),
+            4 => Some(Self::Rgba),
             _ => None,
         }
     }
@@ -78,8 +78,8 @@ impl ColorType {
     pub fn channels(self) -> u8 {
         match self {
             Self::L    => 1,
-            Self::RGB  => 3,
-            Self::RGBA => 4,
+            Self::Rgb  => 3,
+            Self::Rgba => 4,
         }
     }
 }
@@ -105,8 +105,8 @@ impl Format {
     fn make_color_list_inner<C: ChannelValue>(color_type: ColorType) -> ColorVariant<C, ColorVecDataInner> {
         match color_type {
             ColorType::L    => ColorVariant::L(Vec::new()),
-            ColorType::RGB  => ColorVariant::Rgb(Vec::new()),
-            ColorType::RGBA => ColorVariant::Rgba(Vec::new()),
+            ColorType::Rgb  => ColorVariant::Rgb(Vec::new()),
+            ColorType::Rgba => ColorVariant::Rgba(Vec::new()),
         }
     }
 
