@@ -1,16 +1,16 @@
-//use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, Shl, ShlAssign, Shr, ShrAssign};
 
 use crate::error::{ReadError, ReadErrorKind};
 
 
 pub trait ChannelValue
 where Self: Sized,
-      //Self: Add,
-      //Self: AddAssign,
-      //Self: Sub,
-      //Self: SubAssign,
-      //Self: Mul,
-      //Self: MulAssign,
+      Self: Add,
+      Self: AddAssign,
+      Self: Sub,
+      Self: SubAssign,
+      Self: Mul,
+      Self: MulAssign,
       Self: std::fmt::Display,
       Self: std::fmt::Debug,
       Self: std::default::Default,
@@ -18,14 +18,31 @@ where Self: Sized,
       Self: Copy,
 {
     const ZERO: Self;
+    const ONE: Self;
     const MAX_VALUE: Self;
     const SIZE: usize = std::mem::size_of::<Self>();
 
     fn from_bytes(bytes: &[u8]) -> Option<Self>;
 }
 
+pub trait IntChannelValue
+where Self: ChannelValue,
+      Self: BitAnd,
+      Self: BitAndAssign,
+      Self: BitOr,
+      Self: BitOrAssign,
+      Self: Shl,
+      Self: ShlAssign,
+      Self: Shl<usize, Output = Self>,
+      Self: ShlAssign<usize>,
+      Self: Shr,
+      Self: ShrAssign,
+      Self: From<u8>
+{}
+
 impl ChannelValue for u8 {
     const ZERO: Self = 0;
+    const ONE: Self = 1;
     const MAX_VALUE: Self = 0xFF;
 
     #[inline]
@@ -39,6 +56,7 @@ impl ChannelValue for u8 {
 
 impl ChannelValue for u16 {
     const ZERO: Self = 0;
+    const ONE: Self = 1;
     const MAX_VALUE: Self = 0xFFFF;
 
     #[inline]
@@ -52,6 +70,7 @@ impl ChannelValue for u16 {
 
 impl ChannelValue for u32 {
     const ZERO: Self = 0;
+    const ONE: Self = 1;
     const MAX_VALUE: Self = 0xFFFF_FFFF;
 
     #[inline]
@@ -65,6 +84,7 @@ impl ChannelValue for u32 {
 
 impl ChannelValue for u64 {
     const ZERO: Self = 0;
+    const ONE: Self = 1;
     const MAX_VALUE: Self = 0xFFFF_FFFF_FFFF_FFFF;
 
     #[inline]
@@ -78,6 +98,7 @@ impl ChannelValue for u64 {
 
 impl ChannelValue for u128 {
     const ZERO: Self = 0;
+    const ONE: Self = 1;
     const MAX_VALUE: Self = 0xFFFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF_FFFF;
 
     #[inline]
@@ -89,12 +110,19 @@ impl ChannelValue for u128 {
     }
 }
 
+impl IntChannelValue for u8 {}
+impl IntChannelValue for u16 {}
+impl IntChannelValue for u32 {}
+impl IntChannelValue for u64 {}
+impl IntChannelValue for u128 {}
+
 // TODO: how to #[cfg()] check this?
 //impl ChannelValue for f16 {}
 //impl ChannelValue for f128 {}
 
 impl ChannelValue for f32 {
     const ZERO: Self = 0.0;
+    const ONE: Self = 1.0;
     const MAX_VALUE: Self = 1.0;
 
     #[inline]
@@ -108,6 +136,7 @@ impl ChannelValue for f32 {
 
 impl ChannelValue for f64 {
     const ZERO: Self = 0.0;
+    const ONE: Self = 1.0;
     const MAX_VALUE: Self = 1.0;
 
     #[inline]
