@@ -8,7 +8,7 @@ pub mod io;
 use std::io::{Read, Seek, Write};
 
 use chunks::{Body, ChunkWrite, Foot, Indx, Meta, Xmet};
-use error::{IllegalDate, ReadError, ReadErrorKind, WriteError};
+use error::{IllegalDate, ReadError, ReadErrorKind, WriteError, WriteErrorKind};
 use flate2::{bufread::ZlibDecoder, write::ZlibEncoder, Compression};
 use format::{ChannelValueType, ColorType, Format, NumberType};
 use io::{read_fourcc, read_u32, read_u64, read_u8};
@@ -301,6 +301,13 @@ impl XZIB {
         }
 
         if let Some(body) = &self.body {
+            if self.indx.is_some() && body.data().color_type() != ColorType::L {
+                return Err(WriteError::with_message(
+                    WriteErrorKind::InvalidParams,
+                    format!("using an index the BODY chunk must be of type L, but was: {}",
+                        body.data().color_type())));
+            }
+
             self.write_chunk(&mut buf, writer, body, compression)?;
         }
 

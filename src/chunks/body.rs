@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use crate::{color::{read_colors_variant, ChannelVariant, ColorList, ColorVariant, ColorVecDataInner, IntChannelValue, Rgb, Rgba}, error::{ReadError, ReadErrorKind, WriteError}, format::Format, Head};
+use crate::{color::{read_colors_variant, write_colors_variant, ChannelValue, ChannelVariant, ColorList, ColorVariant, ColorVecDataInner, IntChannelValue, Rgb, Rgba}, error::{ReadError, ReadErrorKind, WriteError, WriteErrorKind}, format::{ChannelValueType, Format}, Head};
 
 use super::ChunkWrite;
 
@@ -42,7 +42,25 @@ impl Body {
     }
 
     pub fn write(&self, head: &Head, writer: &mut impl Write) -> Result<(), WriteError> {
-        todo!()
+        let Some(channel_value_type) = ChannelValueType::from_planes(head.number_type(), head.planes()) else {
+            return Err(WriteError::with_message(
+                WriteErrorKind::InvalidParams,
+                format!("unsupported parameters for body colors: {} {}",
+                    head.number_type(), head.planes())));
+        };
+
+        if head.is_interleaved() {
+            todo!()
+        }
+
+        if self.data.channel_value_type() != channel_value_type {
+            return Err(WriteError::with_message(
+                WriteErrorKind::InvalidParams,
+                format!("actual channel value type doesn't match type defined in header: {} != {}",
+                    self.data.channel_value_type(), channel_value_type)));
+        }
+
+        write_colors_variant(&self.data, head.planes(), writer)
     }
 }
 
@@ -91,31 +109,26 @@ pub const LOOKUP_16: [fn(u16) -> u16; 16] = [
 ];
 
 pub fn read_interleaved_colors(bytes: &[u8], is_float: bool, planes: u8, channels: u8, width: u32, height: u32) -> Result<ColorList, ReadError> {
-    if channels != 1 && channels != 3 && channels != 4 {
-        return Err(ReadError::with_message(
-            ReadErrorKind::BrokenFile, format!("illegal number of channels: {channels}")));
-    }
-
     if is_float {
-        match planes {
+        return match planes {
             32 => {
-                todo!()
+                Ok(ChannelVariant::F32(read_interleaved_bytes(bytes, planes, channels, width, height)?))
             }
             64 => {
-                todo!()
+                Ok(ChannelVariant::F64(read_interleaved_bytes(bytes, planes, channels, width, height)?))
             }
             _ => {
-                return Err(ReadError::with_message(
+                Err(ReadError::with_message(
                     ReadErrorKind::BrokenFile,
-                    format!("unsupported color format: {} {planes}", if is_float { "float" } else { "int" })));
+                    format!("unsupported color format: {} {planes}", if is_float { "float" } else { "int" })))
             }
-        }
+        };
     }
 
     if planes == 0 {
-        return Err(ReadError::with_message(
+        Err(ReadError::with_message(
             ReadErrorKind::BrokenFile,
-            format!("unsupported color format: {} {planes}", if is_float { "float" } else { "int" })));
+            format!("unsupported color format: {} {planes}", if is_float { "float" } else { "int" })))
     } else if planes == 1 {
         // special case for 1-bit black and white images
         // here the bits aren't just shifted to the left, but its mapped to 0 or 255
@@ -131,10 +144,105 @@ pub fn read_interleaved_colors(bytes: &[u8], is_float: bool, planes: u8, channel
     } else if planes <= 128 {
         Ok(ChannelVariant::U128(read_interleaved_int_colors(bytes, planes, channels, width, height)?))
     } else {
-        return Err(ReadError::with_message(
+        Err(ReadError::with_message(
             ReadErrorKind::BrokenFile,
-            format!("unsupported color format: {} {planes}", if is_float { "float" } else { "int" })));
+            format!("unsupported color format: {} {planes}", if is_float { "float" } else { "int" })))
     }
+}
+
+pub fn read_interleaved_bytes<C: ChannelValue>(bytes: &[u8], planes: u8, channels: u8, width: u32, height: u32) -> Result<ColorVariant<C, ColorVecDataInner>, ReadError> {
+    let plane_len = (width as usize + 7) / 8;
+    let channel_len = plane_len * planes as usize;
+    let row_len = channel_len * channels as usize;
+    let mut buf = vec![0u8; planes as usize];
+    match channels {
+        1 => {
+            let mut data = Vec::with_capacity(width as usize * height as usize);
+            for y in 0..height as usize {
+                let y_offset = y * row_len;
+                let bytes = &bytes[y_offset..];
+
+                for x in 0..width as usize {
+                    let Some(v) = read_interleaved_bytes_chunk(bytes, planes, plane_len, x, &mut buf) else {
+                        return Err(ReadError::with_message(ReadErrorKind::BrokenFile, "truncated BODY chunk"));
+                    };
+                    data.push(v);
+                }
+            }
+            Ok(ColorVariant::L(data))
+        }
+        3 => {
+            let mut data = Vec::with_capacity(width as usize * height as usize);
+            for y in 0..height as usize {
+                let y_offset = y * row_len;
+                let reds   = &bytes[y_offset..];
+                let greens = &reds[channel_len..];
+                let blues  = &greens[channel_len..];
+
+                for x in 0..width as usize {
+                    let Some(r) = read_interleaved_bytes_chunk(reds, planes, plane_len, x, &mut buf) else {
+                        return Err(ReadError::with_message(ReadErrorKind::BrokenFile, "truncated BODY chunk"));
+                    };
+                    let Some(g) = read_interleaved_bytes_chunk(greens, planes, plane_len, x, &mut buf) else {
+                        return Err(ReadError::with_message(ReadErrorKind::BrokenFile, "truncated BODY chunk"));
+                    };
+                    let Some(b) = read_interleaved_bytes_chunk(blues, planes, plane_len, x, &mut buf) else {
+                        return Err(ReadError::with_message(ReadErrorKind::BrokenFile, "truncated BODY chunk"));
+                    };
+
+                    data.push(Rgb([r, g, b]));
+                }
+            }
+            Ok(ColorVariant::Rgb(data))
+        }
+        4 => {
+            let mut data = Vec::with_capacity(width as usize * height as usize);
+            for y in 0..height as usize {
+                let y_offset = y * row_len;
+                let reds   = &bytes[y_offset..];
+                let greens = &reds[channel_len..];
+                let blues  = &greens[channel_len..];
+                let alphas = &blues[channel_len..];
+
+                for x in 0..width as usize {
+                    let Some(r) = read_interleaved_bytes_chunk(reds, planes, plane_len, x, &mut buf) else {
+                        return Err(ReadError::with_message(ReadErrorKind::BrokenFile, "truncated BODY chunk"));
+                    };
+                    let Some(g) = read_interleaved_bytes_chunk(greens, planes, plane_len, x, &mut buf) else {
+                        return Err(ReadError::with_message(ReadErrorKind::BrokenFile, "truncated BODY chunk"));
+                    };
+                    let Some(b) = read_interleaved_bytes_chunk(blues, planes, plane_len, x, &mut buf) else {
+                        return Err(ReadError::with_message(ReadErrorKind::BrokenFile, "truncated BODY chunk"));
+                    };
+                    let Some(a) = read_interleaved_bytes_chunk(alphas, planes, plane_len, x, &mut buf) else {
+                        return Err(ReadError::with_message(ReadErrorKind::BrokenFile, "truncated BODY chunk"));
+                    };
+
+                    data.push(Rgba([r, g, b, a]));
+                }
+            }
+            Ok(ColorVariant::Rgba(data))
+        }
+        _ => Err(ReadError::with_message(
+            ReadErrorKind::BrokenFile,
+            format!("illegal number of channels: {channels}")))
+    }
+}
+
+#[inline]
+pub fn read_interleaved_bytes_chunk<C: ChannelValue>(bytes: &[u8], planes: u8, plane_len: usize, x: usize, output: &mut [u8]) -> Option<C> {
+    let byte_offset = x / 8;
+    let bit_offset = x % 8;
+    let byte_offset = byte_offset;
+    output.fill(0);
+    for plane in 0..planes as usize {
+        let output_index = plane / 8;
+        let output_bit = plane % 8;
+        let plane_index = plane_len * plane;
+        output[output_index] |= (bytes[plane_index + byte_offset] >> bit_offset) << output_bit;
+    }
+
+    C::from_bytes(output)
 }
 
 pub fn read_interleaved_int_colors<C: IntChannelValue>(bytes: &[u8], planes: u8, channels: u8, width: u32, height: u32) -> Result<ColorVariant<C, ColorVecDataInner>, ReadError> {

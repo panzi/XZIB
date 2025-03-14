@@ -1,6 +1,6 @@
 use std::{io::Write, ops::{Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, Mul, MulAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign}};
 
-use crate::{error::{ReadError, ReadErrorKind}, format::{ChannelValueType, ColorType}};
+use crate::{error::{ReadError, ReadErrorKind, WriteError, WriteErrorKind}, format::{ChannelValueType, ColorType}};
 
 
 pub trait ChannelValue
@@ -156,8 +156,6 @@ impl ChannelValue for u128 {
 impl IntChannelValue for u8 {
     #[inline]
     fn extend(self, planes: u8) -> Self {
-        debug_assert!(planes > 0 && planes <= 8);
-
         // TODO: branchless?
         match planes {
             1 => {
@@ -181,7 +179,10 @@ impl IntChannelValue for u8 {
             7 => {
                 self << 1 | self >> 6
             }
-            _ => self
+            _ => {
+                debug_assert!(false, "illegal planes for u8: {planes}");
+                self
+            }
         }
     }
 }
@@ -448,6 +449,21 @@ impl<C: ChannelValue> ColorFamily<C> for ColorVecDataInner {
 
 pub type ColorList = ChannelVariant<ColorVecData>;
 
+impl ColorList {
+    #[inline]
+    pub fn color_type(&self) -> ColorType {
+        match self {
+            ChannelVariant::U8(  data) => data.color_type(),
+            ChannelVariant::U16 (data) => data.color_type(),
+            ChannelVariant::U32 (data) => data.color_type(),
+            ChannelVariant::U64 (data) => data.color_type(),
+            ChannelVariant::U128(data) => data.color_type(),
+            ChannelVariant::F32 (data) => data.color_type(),
+            ChannelVariant::F64 (data) => data.color_type(),
+        }
+    }
+}
+
 pub fn read_colors_into<Color, ChannelValue>(mut bytes: &[u8], colors: &mut Vec<Color>)
 where Color: crate::color::Color<ChannelValue>,
       ChannelValue: crate::color::ChannelValue
@@ -614,4 +630,117 @@ pub fn read_colors_variant(bytes: &[u8], is_float: bool, depth: u8, channels: u8
             ));
         }
     }
+}
+
+#[inline]
+pub fn write_colors_variant(colors: &ColorList, planes: u8, writer: &mut impl Write) -> Result<(), WriteError> {
+    match colors {
+        // TODO: correctly handle planes if <= 8
+        ChannelVariant::U8  (colors) if planes ==   1 => write_1bit_colors_variant_inner(colors, writer)?,
+        ChannelVariant::U8  (colors) if planes ==   4 => write_4bit_colors_variant_inner(colors, writer)?,
+        ChannelVariant::U8  (colors) if planes ==   8 => write_colors_variant_inner(colors, writer)?,
+        ChannelVariant::U16 (colors) if planes ==  16 => write_colors_variant_inner(colors, writer)?,
+        ChannelVariant::U32 (colors) if planes ==  32 => write_colors_variant_inner(colors, writer)?,
+        ChannelVariant::U64 (colors) if planes ==  64 => write_colors_variant_inner(colors, writer)?,
+        ChannelVariant::U128(colors) if planes == 128 => write_colors_variant_inner(colors, writer)?,
+        ChannelVariant::F32 (colors) if planes ==  32 => write_colors_variant_inner(colors, writer)?,
+        ChannelVariant::F64 (colors) if planes ==  64 => write_colors_variant_inner(colors, writer)?,
+        _ => {
+            return Err(WriteError::with_message(
+                WriteErrorKind::InvalidParams,
+                format!("invalid bit depth for channel value type: {planes} Vs {}", colors.channel_value_type())
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+#[inline]
+pub fn write_1bit_colors_variant_inner(colors: &ColorVariant<u8, ColorVecDataInner>, writer: &mut impl Write) -> std::io::Result<()> {
+    match colors {
+        ColorVariant::L   (colors) => write_1bit_colors(colors, writer),
+        ColorVariant::Rgb (colors) => write_1bit_colors(colors, writer),
+        ColorVariant::Rgba(colors) => write_1bit_colors(colors, writer),
+    }
+}
+
+#[inline]
+pub fn write_1bit_colors<Color>(colors: &[Color], mut writer: impl Write) -> std::io::Result<()>
+where Color: crate::color::Color<u8>
+{
+    let mut byte = 0u8;
+    let mut bit = 0;
+
+    for color in colors {
+        for &channel in color.channels() {
+            if bit == 8 {
+                writer.write_all(std::slice::from_ref(&byte))?;
+                byte = 0;
+            }
+            byte |= channel << bit;
+            bit += 1;
+        }
+    }
+
+    if bit != 0 {
+        writer.write_all(std::slice::from_ref(&byte))?;
+    }
+
+    Ok(())
+}
+
+#[inline]
+pub fn write_4bit_colors_variant_inner(colors: &ColorVariant<u8, ColorVecDataInner>, writer: &mut impl Write) -> std::io::Result<()> {
+    match colors {
+        ColorVariant::L   (colors) => write_4bit_colors(colors, writer),
+        ColorVariant::Rgb (colors) => write_4bit_colors(colors, writer),
+        ColorVariant::Rgba(colors) => write_4bit_colors(colors, writer),
+    }
+}
+
+#[inline]
+pub fn write_4bit_colors<Color>(colors: &[Color], mut writer: impl Write) -> std::io::Result<()>
+where Color: crate::color::Color<u8>
+{
+    let mut byte = 0u8;
+    let mut bit = 0;
+
+    for color in colors {
+        for &channel in color.channels() {
+            if bit == 8 {
+                writer.write_all(std::slice::from_ref(&byte))?;
+                byte = channel << 4;
+            } else {
+                byte |= channel;
+            }
+            bit += 4;
+        }
+    }
+
+    if bit != 0 {
+        writer.write_all(std::slice::from_ref(&byte))?;
+    }
+
+    Ok(())
+}
+
+#[inline]
+pub fn write_colors_variant_inner<C: crate::color::ChannelValue>(colors: &ColorVariant<C, ColorVecDataInner>, writer: &mut impl Write) -> std::io::Result<()> {
+    match colors {
+        ColorVariant::L   (colors) => write_colors(colors, writer),
+        ColorVariant::Rgb (colors) => write_colors(colors, writer),
+        ColorVariant::Rgba(colors) => write_colors(colors, writer),
+    }
+}
+
+#[inline]
+pub fn write_colors<Color, ChannelValue>(colors: &[Color], mut writer: impl Write) -> std::io::Result<()>
+where ChannelValue: crate::color::ChannelValue,
+      Color: crate::color::Color<ChannelValue>,
+{
+    for color in colors {
+        color.write_to(&mut writer)?;
+    }
+    Ok(())
 }
