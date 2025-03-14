@@ -49,7 +49,7 @@ where Self: ChannelValue,
 {
     #[inline]
     fn extend(self, planes: u8) -> Self {
-        debug_assert!(planes as u32 >= (Self::BITS / 2));
+        debug_assert!(planes as u32 >= (Self::BITS / 2) && planes as u32 <= Self::BITS);
 
         let lshift = Self::BITS - planes as u32;
         let rshift = (planes as u32 * 2) - Self::BITS;
@@ -156,18 +156,33 @@ impl ChannelValue for u128 {
 impl IntChannelValue for u8 {
     #[inline]
     fn extend(self, planes: u8) -> Self {
-        let planes = planes as i32;
-        let shift = 8 - planes;
+        debug_assert!(planes > 0 && planes <= 8);
 
-        // XXX: negative shift is impossible!
-        (self << shift) |
-        (self << shift - planes) |
-        (self << shift - planes * 2) |
-        (self << shift - planes * 3) |
-        (self << shift - planes * 4) |
-        (self << shift - planes * 5) |
-        (self << shift - planes * 6) |
-        (self << shift - planes * 7)
+        // TODO: branchless?
+        match planes {
+            1 => {
+                self * 255
+            }
+            2 => {
+                self << 6 | self << 4 | self << 2 | self
+            }
+            3 => {
+                self << 5 | self << 2 | self >> 1
+            }
+            4 => {
+                self << 4 | self
+            }
+            5 => {
+                self << 3 | self >> 2
+            }
+            6 => {
+                self << 2 | self >> 4
+            }
+            7 => {
+                self << 1 | self >> 6
+            }
+            _ => self
+        }
     }
 }
 
