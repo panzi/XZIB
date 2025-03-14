@@ -141,7 +141,6 @@ pub fn read_interleaved_int_colors<C: IntChannelValue>(bytes: &[u8], planes: u8,
     let plane_len = (width as usize + 7) / 8;
     let channel_len = plane_len * planes as usize;
     let row_len = channel_len * channels as usize;
-    let shift = C::BITS - planes as usize;
     match channels {
         1 => {
             let mut data = Vec::with_capacity(width as usize * height as usize);
@@ -150,7 +149,7 @@ pub fn read_interleaved_int_colors<C: IntChannelValue>(bytes: &[u8], planes: u8,
                 let bytes = &bytes[y_offset..];
 
                 for x in 0..width as usize {
-                    let v = read_interleaved_int_color::<C>(bytes, planes, plane_len, x) << shift;
+                    let v = read_interleaved_int_color::<C>(bytes, planes, plane_len, x).extend(planes);
                     data.push(v);
                 }
             }
@@ -165,9 +164,9 @@ pub fn read_interleaved_int_colors<C: IntChannelValue>(bytes: &[u8], planes: u8,
                 let blues  = &greens[channel_len..];
 
                 for x in 0..width as usize {
-                    let r = read_interleaved_int_color::<C>(reds,   planes, plane_len, x) << shift;
-                    let g = read_interleaved_int_color::<C>(greens, planes, plane_len, x) << shift;
-                    let b = read_interleaved_int_color::<C>(blues,  planes, plane_len, x) << shift;
+                    let r = read_interleaved_int_color::<C>(reds,   planes, plane_len, x).extend(planes);
+                    let g = read_interleaved_int_color::<C>(greens, planes, plane_len, x).extend(planes);
+                    let b = read_interleaved_int_color::<C>(blues,  planes, plane_len, x).extend(planes);
 
                     data.push(Rgb([r, g, b]));
                 }
@@ -184,10 +183,10 @@ pub fn read_interleaved_int_colors<C: IntChannelValue>(bytes: &[u8], planes: u8,
                 let alphas = &blues[channel_len..];
 
                 for x in 0..width as usize {
-                    let r = read_interleaved_int_color::<C>(reds,   planes, plane_len, x) << shift;
-                    let g = read_interleaved_int_color::<C>(greens, planes, plane_len, x) << shift;
-                    let b = read_interleaved_int_color::<C>(blues,  planes, plane_len, x) << shift;
-                    let a = read_interleaved_int_color::<C>(alphas, planes, plane_len, x) << shift;
+                    let r = read_interleaved_int_color::<C>(reds,   planes, plane_len, x).extend(planes);
+                    let g = read_interleaved_int_color::<C>(greens, planes, plane_len, x).extend(planes);
+                    let b = read_interleaved_int_color::<C>(blues,  planes, plane_len, x).extend(planes);
+                    let a = read_interleaved_int_color::<C>(alphas, planes, plane_len, x).extend(planes);
 
                     data.push(Rgba([r, g, b, a]));
                 }

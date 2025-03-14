@@ -20,8 +20,8 @@ where Self: Sized,
     const ZERO: Self;
     const ONE: Self;
     const MAX_VALUE: Self;
-    const SIZE: usize = std::mem::size_of::<Self>();
-    const BITS: usize = Self::SIZE * 8;
+    const SIZE: u32 = std::mem::size_of::<Self>() as u32;
+    const BITS: u32 = Self::SIZE * 8;
 
     fn from_bytes(bytes: &[u8]) -> Option<Self>;
     fn write_to(&self, writer: impl Write) -> std::io::Result<()>;
@@ -29,18 +29,34 @@ where Self: Sized,
 
 pub trait IntChannelValue
 where Self: ChannelValue,
-      Self: BitAnd,
+      Self: BitAnd<Output = Self>,
       Self: BitAndAssign,
-      Self: BitOr,
+      Self: BitOr<Output = Self>,
       Self: BitOrAssign,
-      Self: Shl,
+      Self: Shl<Output = Self>,
       Self: ShlAssign,
       Self: Shl<usize, Output = Self>,
       Self: ShlAssign<usize>,
-      Self: Shr,
+      Self: Shl<u32, Output = Self>,
+      Self: ShlAssign<u32>,
+      Self: Shr<Output = Self>,
       Self: ShrAssign,
+      Self: Shr<usize, Output = Self>,
+      Self: ShrAssign<usize>,
+      Self: Shr<u32, Output = Self>,
+      Self: ShrAssign<u32>,
       Self: From<u8>,
-{}
+{
+    #[inline]
+    fn extend(self, planes: u8) -> Self {
+        debug_assert!(planes as u32 >= (Self::BITS / 2));
+
+        let lshift = Self::BITS - planes as u32;
+        let rshift = (planes as u32 * 2) - Self::BITS;
+
+        (self << lshift) | (self >> rshift)
+    }
+}
 
 impl ChannelValue for u8 {
     const ZERO: Self = 0;
@@ -137,7 +153,24 @@ impl ChannelValue for u128 {
     }
 }
 
-impl IntChannelValue for u8 {}
+impl IntChannelValue for u8 {
+    #[inline]
+    fn extend(self, planes: u8) -> Self {
+        let planes = planes as i32;
+        let shift = 8 - planes;
+
+        // XXX: negative shift is impossible!
+        (self << shift) |
+        (self << shift - planes) |
+        (self << shift - planes * 2) |
+        (self << shift - planes * 3) |
+        (self << shift - planes * 4) |
+        (self << shift - planes * 5) |
+        (self << shift - planes * 6) |
+        (self << shift - planes * 7)
+    }
+}
+
 impl IntChannelValue for u16 {}
 impl IntChannelValue for u32 {}
 impl IntChannelValue for u64 {}
@@ -194,7 +227,7 @@ pub struct Rgb<C: ChannelValue>(pub [C; 3]);
 pub struct Rgba<C: ChannelValue>(pub [C; 4]);
 
 pub trait Color<C: ChannelValue>: std::fmt::Debug + Sized {
-    const CHANNELS: usize;
+    const CHANNELS: u8;
 
     fn to_rgb(&self) -> Rgb<C>;
     fn to_rgba(&self) -> Rgba<C>;
@@ -213,7 +246,7 @@ pub trait Color<C: ChannelValue>: std::fmt::Debug + Sized {
 }
 
 impl<C: ChannelValue> Color<C> for Rgb<C> {
-    const CHANNELS: usize = 3;
+    const CHANNELS: u8 = 3;
 
     #[inline]
     fn to_rgb(&self) -> Rgb<C> {
@@ -230,12 +263,12 @@ impl<C: ChannelValue> Color<C> for Rgb<C> {
         let Some(r) = C::from_bytes(bytes) else {
             return None;
         };
-        bytes = &bytes[C::SIZE..];
+        bytes = &bytes[C::SIZE as usize..];
 
         let Some(g) = C::from_bytes(bytes) else {
             return None;
         };
-        bytes = &bytes[C::SIZE..];
+        bytes = &bytes[C::SIZE as usize..];
 
         let Some(b) = C::from_bytes(bytes) else {
             return None;
@@ -256,7 +289,7 @@ impl<C: ChannelValue> Color<C> for Rgb<C> {
 }
 
 impl<C: ChannelValue> Color<C> for Rgba<C> {
-    const CHANNELS: usize = 4;
+    const CHANNELS: u8 = 4;
 
     #[inline]
     fn to_rgb(&self) -> Rgb<C> {
@@ -273,17 +306,17 @@ impl<C: ChannelValue> Color<C> for Rgba<C> {
         let Some(r) = C::from_bytes(bytes) else {
             return None;
         };
-        bytes = &bytes[C::SIZE..];
+        bytes = &bytes[C::SIZE as usize..];
 
         let Some(g) = C::from_bytes(bytes) else {
             return None;
         };
-        bytes = &bytes[C::SIZE..];
+        bytes = &bytes[C::SIZE as usize..];
 
         let Some(b) = C::from_bytes(bytes) else {
             return None;
         };
-        bytes = &bytes[C::SIZE..];
+        bytes = &bytes[C::SIZE as usize..];
 
         let Some(a) = C::from_bytes(bytes) else {
             return None;
@@ -304,7 +337,7 @@ impl<C: ChannelValue> Color<C> for Rgba<C> {
 }
 
 impl<C: ChannelValue> Color<C> for C {
-    const CHANNELS: usize = 1;
+    const CHANNELS: u8 = 1;
 
     #[inline]
     fn to_rgb(&self) -> Rgb<C> {
@@ -404,7 +437,7 @@ pub fn read_colors_into<Color, ChannelValue>(mut bytes: &[u8], colors: &mut Vec<
 where Color: crate::color::Color<ChannelValue>,
       ChannelValue: crate::color::ChannelValue
 {
-    let color_size = Color::CHANNELS * ChannelValue::SIZE;
+    let color_size = Color::CHANNELS as usize * ChannelValue::SIZE as usize;
     let color_count = bytes.len() / color_size;
     colors.reserve(color_count);
 
