@@ -190,3 +190,12 @@ make_error! {
 make_error! {
     IllegalDate
 }
+
+make_error! {
+    WriteError
+    WriteErrorKind {
+        IO,
+        InvalidParams
+    }
+    impl IO: std::io::Error;
+}

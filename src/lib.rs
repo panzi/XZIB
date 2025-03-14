@@ -8,8 +8,9 @@ pub mod io;
 use std::io::{Read, Seek, Write};
 
 use chunks::{Body, ChunkWrite, Foot, Indx, Meta, Xmet};
-use error::{IllegalDate, ReadError, ReadErrorKind};
+use error::{IllegalDate, ReadError, ReadErrorKind, WriteError};
 use flate2::{bufread::ZlibDecoder, write::ZlibEncoder, Compression};
+use format::{ChannelValueType, ColorType, Format, NumberType};
 use io::{read_fourcc, read_u32, read_u64, read_u8};
 
 #[derive(Debug)]
@@ -31,6 +32,41 @@ impl Head {
     #[inline]
     pub fn is_float(&self) -> bool {
         self.flags & XZIB::FLOAT != 0
+    }
+
+    #[inline]
+    pub fn number_type(&self) -> NumberType {
+        if self.is_float() {
+            NumberType::Float
+        } else {
+            NumberType::Integer
+        }
+    }
+
+    #[inline]
+    pub fn channel_value_type(&self) -> Option<ChannelValueType> {
+        ChannelValueType::from_planes(self.number_type(), self.planes)
+    }
+
+    #[inline]
+    pub fn index_channel_value_type(&self) -> Option<ChannelValueType> {
+        ChannelValueType::from_planes(self.number_type(), self.index_planes)
+    }
+
+    #[inline]
+    pub fn color_type(&self) -> Option<ColorType> {
+        ColorType::from_channels(self.channels)
+    }
+
+    #[inline]
+    pub fn format(&self) -> Option<Format> {
+        let Some(channel_value_type) = self.channel_value_type() else {
+            return None;
+        };
+        let Some(color_type) = self.color_type() else {
+            return None;
+        };
+        Some(Format(channel_value_type, color_type))
     }
 
     #[inline]
@@ -247,7 +283,7 @@ impl XZIB {
         })
     }
 
-    pub fn write(&self, writer: &mut impl Write, compression: Compression) -> std::io::Result<()> {
+    pub fn write(&self, writer: &mut impl Write, compression: Compression) -> Result<(), WriteError> {
         self.head.write(writer)?;
 
         let mut buf = Vec::new();
@@ -276,12 +312,13 @@ impl XZIB {
         Ok(())
     }
 
-    fn write_chunk(&self, mut buf: &mut Vec<u8>, writer: &mut impl Write, chunk: &impl ChunkWrite, compression: Compression) -> std::io::Result<()> {
+    fn write_chunk(&self, mut buf: &mut Vec<u8>, writer: &mut impl Write, chunk: &impl ChunkWrite, compression: Compression) -> Result<(), WriteError> {
         buf.clear();
         let mut fourcc = Indx::FOURCC;
         if compression.level() > 0 {
             let mut encoder = ZlibEncoder::new(&mut buf, compression);
             chunk.write(&self.head, &mut encoder)?;
+            encoder.finish()?;
             fourcc[1] = fourcc[1].to_ascii_lowercase();
         } else {
             chunk.write(&self.head, buf)?;
@@ -296,7 +333,9 @@ impl XZIB {
             writer.write_all(&(buf.len() as u64).to_le_bytes())?;
         }
 
-        writer.write_all(&buf)
+        writer.write_all(&buf)?;
+
+        Ok(())
     }
 }
 

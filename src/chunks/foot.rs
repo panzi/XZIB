@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use crate::{error::{ReadError, ReadErrorKind}, Head};
+use crate::{error::{ReadError, ReadErrorKind, WriteError}, Head};
 
 use super::ChunkWrite;
 
@@ -96,6 +96,20 @@ impl ChecksumType {
     }
 }
 
+impl std::fmt::Display for ChecksumType {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Crc32  => "CRC32".fmt(f),
+            Self::Sha1   => "SHA-1".fmt(f),
+            Self::Sha224 => "SHA-224".fmt(f),
+            Self::Sha256 => "SHA-256".fmt(f),
+            Self::Sha384 => "SHA-384".fmt(f),
+            Self::Sha512 => "SHA-512".fmt(f),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Foot {
     checksum: Checksum,
@@ -122,51 +136,39 @@ impl Foot {
                 format!("illegal checksum type: {checksum_type}")));
         };
 
-        let checksum = match checksum_type {
-            ChecksumType::Crc32 => {
-                if let Some(chunk) = bytes[1..].first_chunk() {
-                    Some(Checksum::Crc32(u32::from_le_bytes(*chunk)))
-                } else { None }
-            }
-            ChecksumType::Sha1 => {
-                if let Some(chunk) = bytes[1..].first_chunk() {
-                    Some(Checksum::Sha1(Box::new(*chunk)))
-                } else { None }
-            }
-            _ => todo!()
-        };
-
-        let Some(checksum) = checksum else {
+        let Some(checksum) = Checksum::from_bytes(checksum_type, &bytes[1..]) else {
             return Err(ReadError::with_message(
                 ReadErrorKind::BrokenFile,
-                "truncated checksum"));
+                format!("truncated {checksum_type} checksum")));
         };
 
         Ok(Self { checksum })
     }
 
-    pub fn write(&self, writer: &mut impl Write) -> std::io::Result<()> {
+    pub fn write(&self, writer: &mut impl Write) -> Result<(), WriteError> {
         writer.write_all(&[self.checksum.checksum_type() as u8])?;
         match &self.checksum {
             Checksum::Crc32(value) => {
-                writer.write_all(&value.to_le_bytes())
+                writer.write_all(&value.to_le_bytes())?;
             }
             Checksum::Sha1(data) => {
-                writer.write_all(data.as_ref())
+                writer.write_all(data.as_ref())?;
             }
             Checksum::Sha224(data) => {
-                writer.write_all(data.as_ref())
+                writer.write_all(data.as_ref())?;
             }
             Checksum::Sha256(data) => {
-                writer.write_all(data.as_ref())
+                writer.write_all(data.as_ref())?;
             }
             Checksum::Sha384(data) => {
-                writer.write_all(data.as_ref())
+                writer.write_all(data.as_ref())?;
             }
             Checksum::Sha512(data) => {
-                writer.write_all(data.as_ref())
+                writer.write_all(data.as_ref())?;
             }
         }
+
+        Ok(())
     }
 }
 
@@ -174,7 +176,7 @@ impl ChunkWrite for Foot {
     const FOURCC: [u8; 4] = Self::FOURCC;
 
     #[inline]
-    fn write(&self, _head: &Head, writer: &mut impl Write) -> std::io::Result<()> {
+    fn write(&self, _head: &Head, writer: &mut impl Write) -> Result<(), WriteError> {
         self.write(writer)
     }
 }

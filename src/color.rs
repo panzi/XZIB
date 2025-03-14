@@ -1,6 +1,6 @@
-use std::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, Shl, ShlAssign, Shr, ShrAssign};
+use std::{io::Write, ops::{Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, Mul, MulAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign}};
 
-use crate::error::{ReadError, ReadErrorKind};
+use crate::{error::{ReadError, ReadErrorKind}, format::{ChannelValueType, ColorType}};
 
 
 pub trait ChannelValue
@@ -23,6 +23,7 @@ where Self: Sized,
     const SIZE: usize = std::mem::size_of::<Self>();
 
     fn from_bytes(bytes: &[u8]) -> Option<Self>;
+    fn write_to(&self, writer: impl Write) -> std::io::Result<()>;
 }
 
 pub trait IntChannelValue
@@ -37,7 +38,7 @@ where Self: ChannelValue,
       Self: ShlAssign<usize>,
       Self: Shr,
       Self: ShrAssign,
-      Self: From<u8>
+      Self: From<u8>,
 {}
 
 impl ChannelValue for u8 {
@@ -51,6 +52,11 @@ impl ChannelValue for u8 {
             return None;
         };
         Some(head[0])
+    }
+
+    #[inline]
+    fn write_to(&self, mut writer: impl Write) -> std::io::Result<()> {
+        writer.write_all(&self.to_le_bytes())
     }
 }
 
@@ -66,6 +72,11 @@ impl ChannelValue for u16 {
         };
         Some(Self::from_le_bytes(*head))
     }
+
+    #[inline]
+    fn write_to(&self, mut writer: impl Write) -> std::io::Result<()> {
+        writer.write_all(&self.to_le_bytes())
+    }
 }
 
 impl ChannelValue for u32 {
@@ -79,6 +90,11 @@ impl ChannelValue for u32 {
             return None;
         };
         Some(Self::from_le_bytes(*head))
+    }
+
+    #[inline]
+    fn write_to(&self, mut writer: impl Write) -> std::io::Result<()> {
+        writer.write_all(&self.to_le_bytes())
     }
 }
 
@@ -94,6 +110,11 @@ impl ChannelValue for u64 {
         };
         Some(Self::from_le_bytes(*head))
     }
+
+    #[inline]
+    fn write_to(&self, mut writer: impl Write) -> std::io::Result<()> {
+        writer.write_all(&self.to_le_bytes())
+    }
 }
 
 impl ChannelValue for u128 {
@@ -107,6 +128,11 @@ impl ChannelValue for u128 {
             return None;
         };
         Some(Self::from_le_bytes(*head))
+    }
+
+    #[inline]
+    fn write_to(&self, mut writer: impl Write) -> std::io::Result<()> {
+        writer.write_all(&self.to_le_bytes())
     }
 }
 
@@ -132,6 +158,11 @@ impl ChannelValue for f32 {
         };
         Some(Self::from_le_bytes(*head))
     }
+
+    #[inline]
+    fn write_to(&self, mut writer: impl Write) -> std::io::Result<()> {
+        writer.write_all(&self.to_le_bytes())
+    }
 }
 
 impl ChannelValue for f64 {
@@ -145,6 +176,11 @@ impl ChannelValue for f64 {
             return None;
         };
         Some(Self::from_le_bytes(*head))
+    }
+
+    #[inline]
+    fn write_to(&self, mut writer: impl Write) -> std::io::Result<()> {
+        writer.write_all(&self.to_le_bytes())
     }
 }
 
@@ -162,6 +198,17 @@ pub trait Color<C: ChannelValue>: std::fmt::Debug + Sized {
     fn to_rgb(&self) -> Rgb<C>;
     fn to_rgba(&self) -> Rgba<C>;
     fn from_bytes(bytes: &[u8]) -> Option<Self>;
+    fn channels(&self) -> &[C];
+    fn channels_mut(&mut self) -> &mut [C];
+
+    #[inline]
+    fn write_to(&self, mut writer: impl Write) -> std::io::Result<()> {
+        for channel in self.channels() {
+            channel.write_to(&mut writer)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<C: ChannelValue> Color<C> for Rgb<C> {
@@ -194,6 +241,16 @@ impl<C: ChannelValue> Color<C> for Rgb<C> {
         };
 
         Some(Rgb([r, g, b]))
+    }
+
+    #[inline]
+    fn channels(&self) -> &[C] {
+        &self.0
+    }
+
+    #[inline]
+    fn channels_mut(&mut self) -> &mut [C] {
+        &mut self.0
     }
 }
 
@@ -233,6 +290,16 @@ impl<C: ChannelValue> Color<C> for Rgba<C> {
 
         Some(Rgba([r, g, b, a]))
     }
+
+    #[inline]
+    fn channels(&self) -> &[C] {
+        &self.0
+    }
+
+    #[inline]
+    fn channels_mut(&mut self) -> &mut [C] {
+        &mut self.0
+    }
 }
 
 impl<C: ChannelValue> Color<C> for C {
@@ -252,6 +319,16 @@ impl<C: ChannelValue> Color<C> for C {
     fn from_bytes(bytes: &[u8]) -> Option<Self> {
         C::from_bytes(bytes)
     }
+
+    #[inline]
+    fn channels(&self) -> &[C] {
+        std::slice::from_ref(self)
+    }
+
+    #[inline]
+    fn channels_mut(&mut self) -> &mut [C] {
+        std::slice::from_mut(self)
+    }
 }
 
 pub trait ChannelValueFamily {
@@ -269,6 +346,21 @@ pub enum ChannelVariant<T: ChannelValueFamily> {
     F64(T::Data<f64>),
 }
 
+impl<T: ChannelValueFamily> ChannelVariant<T> {
+    #[inline]
+    pub fn channel_value_type(&self) -> ChannelValueType {
+        match self {
+            ChannelVariant::U8(_)   => ChannelValueType::U8,
+            ChannelVariant::U16(_)  => ChannelValueType::U16,
+            ChannelVariant::U32(_)  => ChannelValueType::U32,
+            ChannelVariant::U64(_)  => ChannelValueType::U64,
+            ChannelVariant::U128(_) => ChannelValueType::U128,
+            ChannelVariant::F32(_)  => ChannelValueType::F32,
+            ChannelVariant::F64(_)  => ChannelValueType::F64,
+        }
+    }
+}
+
 pub trait ColorFamily<C: ChannelValue> {
     type Data<T> where T: Color<C>;
 }
@@ -278,6 +370,17 @@ pub enum ColorVariant<C: ChannelValue, T: ColorFamily<C>> {
     L(T::Data<C>),
     Rgb(T::Data<Rgb<C>>),
     Rgba(T::Data<Rgba<C>>),
+}
+
+impl<C: ChannelValue, T: ColorFamily<C>> ColorVariant<C, T> {
+    #[inline]
+    pub fn color_type(&self) -> ColorType {
+        match self {
+            Self::L(_)    => ColorType::L,
+            Self::Rgb(_)  => ColorType::Rgb,
+            Self::Rgba(_) => ColorType::Rgba,
+        }
+    }
 }
 
 #[derive(Debug)]

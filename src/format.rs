@@ -6,6 +6,28 @@ pub enum NumberType {
     Float,
 }
 
+impl NumberType {
+    #[inline]
+    pub fn is_float(self) -> bool {
+        matches!(self, NumberType::Float)
+    }
+
+    #[inline]
+    pub fn is_integer(self) -> bool {
+        matches!(self, NumberType::Integer)
+    }
+}
+
+impl std::fmt::Display for NumberType {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Integer => "int".fmt(f),
+            Self::Float   => "float".fmt(f)
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChannelValueType {
     U8, U16, U32, U64, U128,
@@ -58,6 +80,13 @@ impl ChannelValueType {
     }
 }
 
+impl std::fmt::Display for ChannelValueType {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} {}", self.number_type(), self.planes())
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorType {
     L, Rgb, Rgba
@@ -84,6 +113,17 @@ impl ColorType {
     }
 }
 
+impl std::fmt::Display for ColorType {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::L    => "L".fmt(f),
+            Self::Rgb  => "RGB".fmt(f),
+            Self::Rgba => "RGBA".fmt(f),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Format(pub ChannelValueType, pub ColorType);
 
@@ -104,8 +144,8 @@ impl Format {
     #[inline]
     fn make_color_list_inner<C: ChannelValue>(color_type: ColorType) -> ColorVariant<C, ColorVecDataInner> {
         match color_type {
-            ColorType::L    => ColorVariant::L(Vec::new()),
-            ColorType::Rgb  => ColorVariant::Rgb(Vec::new()),
+            ColorType::L    => ColorVariant::L   (Vec::new()),
+            ColorType::Rgb  => ColorVariant::Rgb (Vec::new()),
             ColorType::Rgba => ColorVariant::Rgba(Vec::new()),
         }
     }
@@ -114,13 +154,21 @@ impl Format {
     pub fn make_color_list(&self) -> ColorList {
         let Format(channel_value_type, color_type) = *self;
         match channel_value_type {
-            ChannelValueType::U8   => ChannelVariant::U8(Self::make_color_list_inner(color_type)),
-            ChannelValueType::U16  => ChannelVariant::U16(Self::make_color_list_inner(color_type)),
-            ChannelValueType::U32  => ChannelVariant::U32(Self::make_color_list_inner(color_type)),
-            ChannelValueType::U64  => ChannelVariant::U64(Self::make_color_list_inner(color_type)),
+            ChannelValueType::U8   => ChannelVariant::U8  (Self::make_color_list_inner(color_type)),
+            ChannelValueType::U16  => ChannelVariant::U16 (Self::make_color_list_inner(color_type)),
+            ChannelValueType::U32  => ChannelVariant::U32 (Self::make_color_list_inner(color_type)),
+            ChannelValueType::U64  => ChannelVariant::U64 (Self::make_color_list_inner(color_type)),
             ChannelValueType::U128 => ChannelVariant::U128(Self::make_color_list_inner(color_type)),
-            ChannelValueType::F32  => ChannelVariant::F32(Self::make_color_list_inner(color_type)),
-            ChannelValueType::F64  => ChannelVariant::F64(Self::make_color_list_inner(color_type)),
+            ChannelValueType::F32  => ChannelVariant::F32 (Self::make_color_list_inner(color_type)),
+            ChannelValueType::F64  => ChannelVariant::F64 (Self::make_color_list_inner(color_type)),
         }
+    }
+}
+
+impl std::fmt::Display for Format {
+    #[inline]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Format(channel_value_type, color_type) = self;
+        write!(f, "{color_type} {channel_value_type}")
     }
 }

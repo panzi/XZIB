@@ -1,6 +1,6 @@
 use std::io::Write;
 
-use crate::{color::{read_colors_variant, ChannelVariant, ColorList, ColorVariant, ColorVecDataInner, IntChannelValue, Rgb, Rgba}, error::{ReadError, ReadErrorKind}, format::Format, Head};
+use crate::{color::{read_colors_variant, ChannelVariant, ColorList, ColorVariant, ColorVecDataInner, IntChannelValue, Rgb, Rgba}, error::{ReadError, ReadErrorKind, WriteError}, format::Format, Head};
 
 use super::ChunkWrite;
 
@@ -41,7 +41,7 @@ impl Body {
         })
     }
 
-    pub fn write(&self, head: &Head, writer: &mut impl Write) -> std::io::Result<()> {
+    pub fn write(&self, head: &Head, writer: &mut impl Write) -> Result<(), WriteError> {
         todo!()
     }
 }
@@ -50,7 +50,7 @@ impl ChunkWrite for Body {
     const FOURCC: [u8; 4] = Self::FOURCC;
 
     #[inline]
-    fn write(&self, head: &Head, writer: &mut impl Write) -> std::io::Result<()> {
+    fn write(&self, head: &Head, writer: &mut impl Write) -> Result<(), WriteError> {
         self.write(head, writer)
     }
 }

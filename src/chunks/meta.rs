@@ -1,7 +1,7 @@
 use core::str;
 use std::io::Write;
 
-use crate::{error::{IllegalMetaKey, ReadError, ReadErrorKind}, Date, Head};
+use crate::{error::{IllegalMetaKey, ReadError, ReadErrorKind, WriteError}, Date, Head};
 
 use super::ChunkWrite;
 
@@ -201,7 +201,7 @@ impl Meta {
         })
     }
     
-    pub fn write(&self, writer: &mut impl Write) -> std::io::Result<()> {
+    pub fn write(&self, writer: &mut impl Write) -> Result<(), WriteError> {
         if !self.title.is_empty() {
             writer.write_all(&[MetaKey::Title as u8])?;
             writer.write_all(self.title.as_bytes())?;
@@ -246,7 +246,7 @@ impl ChunkWrite for Meta {
     const FOURCC: [u8; 4] = Self::FOURCC;
 
     #[inline]
-    fn write(&self, _head: &Head, writer: &mut impl Write) -> std::io::Result<()> {
+    fn write(&self, _head: &Head, writer: &mut impl Write) -> Result<(), WriteError> {
         self.write(writer)
     }
 }
