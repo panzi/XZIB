@@ -141,7 +141,7 @@ pub fn read_interleaved_int_colors<C: IntChannelValue>(bytes: &[u8], planes: u8,
     let plane_len = (width as usize + 7) / 8;
     let channel_len = plane_len * planes as usize;
     let row_len = channel_len * channels as usize;
-    let shift = C::SIZE * 8 - planes as usize;
+    let shift = C::BITS - planes as usize;
     match channels {
         1 => {
             let mut data = Vec::with_capacity(width as usize * height as usize);
@@ -150,8 +150,8 @@ pub fn read_interleaved_int_colors<C: IntChannelValue>(bytes: &[u8], planes: u8,
                 let bytes = &bytes[y_offset..];
 
                 for x in 0..width as usize {
-                    let value: C = read_interleaved_int_color(bytes, planes, plane_len, x);
-                    data.push(value << shift);
+                    let v = read_interleaved_int_color::<C>(bytes, planes, plane_len, x) << shift;
+                    data.push(v);
                 }
             }
             Ok(ColorVariant::L(data))

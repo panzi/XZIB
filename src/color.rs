@@ -21,6 +21,7 @@ where Self: Sized,
     const ONE: Self;
     const MAX_VALUE: Self;
     const SIZE: usize = std::mem::size_of::<Self>();
+    const BITS: usize = Self::SIZE * 8;
 
     fn from_bytes(bytes: &[u8]) -> Option<Self>;
     fn write_to(&self, writer: impl Write) -> std::io::Result<()>;
@@ -504,7 +505,7 @@ pub fn read_colors_variant(bytes: &[u8], is_float: bool, depth: u8, channels: u8
                     let color_count = bytes.len() * 2;
                     let mut colors = Vec::with_capacity(color_count);
                     for offset in 0..color_count {
-                        let v = get_nibble(bytes, offset) << 4;
+                        let v = get_nibble(bytes, offset); let v = (v << 4) | v;
                         colors.push(v);
                     }
                     Ok(ChannelVariant::U8(ColorVariant::L(colors)))
@@ -513,9 +514,9 @@ pub fn read_colors_variant(bytes: &[u8], is_float: bool, depth: u8, channels: u8
                     let color_count = (bytes.len() * 2) / 3;
                     let mut colors = Vec::with_capacity(color_count);
                     for offset in (0..(color_count * 3)).step_by(3) {
-                        let r = get_nibble(bytes, offset + 0) << 4;
-                        let g = get_nibble(bytes, offset + 1) << 4;
-                        let b = get_nibble(bytes, offset + 2) << 4;
+                        let r = get_nibble(bytes, offset + 0); let r = (r << 4) | r;
+                        let g = get_nibble(bytes, offset + 1); let g = (g << 4) | g;
+                        let b = get_nibble(bytes, offset + 2); let b = (b << 4) | b;
                         colors.push(Rgb([r, g, b]));
                     }
                     Ok(ChannelVariant::U8(ColorVariant::Rgb(colors)))
@@ -524,10 +525,10 @@ pub fn read_colors_variant(bytes: &[u8], is_float: bool, depth: u8, channels: u8
                     let color_count = (bytes.len() * 2) / 4;
                     let mut colors = Vec::with_capacity(color_count);
                     for offset in (0..(color_count * 4)).step_by(4) {
-                        let r = get_nibble(bytes, offset + 0) << 4;
-                        let g = get_nibble(bytes, offset + 1) << 4;
-                        let b = get_nibble(bytes, offset + 2) << 4;
-                        let a = get_nibble(bytes, offset + 3) << 4;
+                        let r = get_nibble(bytes, offset + 0); let r = (r << 4) | r;
+                        let g = get_nibble(bytes, offset + 1); let g = (g << 4) | g;
+                        let b = get_nibble(bytes, offset + 2); let b = (b << 4) | b;
+                        let a = get_nibble(bytes, offset + 3); let a = (a << 4) | a;
                         colors.push(Rgba([r, g, b, a]));
                     }
                     Ok(ChannelVariant::U8(ColorVariant::Rgba(colors)))
