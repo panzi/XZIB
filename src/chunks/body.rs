@@ -49,15 +49,22 @@ impl Body {
                     head.number_type(), head.planes())));
         };
 
+        let data_channel_value_type = self.data.channel_value_type();
         if head.is_interleaved() {
-            todo!()
+            if data_channel_value_type.number_type() != head.number_type() || data_channel_value_type.planes() < head.planes() {
+                return Err(WriteError::with_message(
+                    WriteErrorKind::InvalidParams,
+                    format!("actual channel value type of {} isn't compatible to the channel value type of {} as defined in the header for interleaved files",
+                        data_channel_value_type, channel_value_type)));
+            }
+            return write_interleaved_colors_varant(&self.data, head, writer);
         }
 
-        if self.data.channel_value_type() != channel_value_type {
+        if data_channel_value_type != channel_value_type {
             return Err(WriteError::with_message(
                 WriteErrorKind::InvalidParams,
-                format!("actual channel value type doesn't match type defined in header: {} != {}",
-                    self.data.channel_value_type(), channel_value_type)));
+                format!("actual channel value type doesn't match type defined in header for non-interleaved files: {} != {}",
+                    data_channel_value_type, channel_value_type)));
         }
 
         write_colors_variant(&self.data, head.planes(), writer)
@@ -111,8 +118,10 @@ pub const LOOKUP_16: [fn(u16) -> u16; 16] = [
 pub fn write_interleaved_colors_varant(data: &ColorList, head: &Head, writer: &mut impl Write) -> Result<(), WriteError> {
     let planes = head.planes();
     if planes > data.channel_value_type().planes() {
-        // TODO: error? zero padding?
-        todo!()
+        return Err(WriteError::with_message(
+            WriteErrorKind::InvalidParams,
+            format!("cannot have more planes defined in the header than used by the actual data: {} > {}",
+                planes, data.channel_value_type().planes())));
     }
     match data {
         ChannelVariant::U8  (data) => write_interleaved_int_colors_variant_inner(data, head, writer)?,
@@ -120,12 +129,77 @@ pub fn write_interleaved_colors_varant(data: &ColorList, head: &Head, writer: &m
         ChannelVariant::U32 (data) => write_interleaved_int_colors_variant_inner(data, head, writer)?,
         ChannelVariant::U64 (data) => write_interleaved_int_colors_variant_inner(data, head, writer)?,
         ChannelVariant::U128(data) => write_interleaved_int_colors_variant_inner(data, head, writer)?,
-        ChannelVariant::F32(data) if planes == 32 => { todo!() }
-        ChannelVariant::F64(data) if planes == 64 => { todo!() }
+        ChannelVariant::F32(data) if planes == 32 => write_interleaved_float_colors_variant_inner(data, head, writer)?,
+        ChannelVariant::F64(data) if planes == 64 => write_interleaved_float_colors_variant_inner(data, head, writer)?,
         _ => return Err(WriteError::with_message(
             WriteErrorKind::InvalidParams,
             format!("unsupported color format: {} {planes}", if head.is_float() { "float" } else { "int" })))
     }
+    Ok(())
+}
+
+#[inline]
+pub fn write_interleaved_float_colors_variant_inner<C: ChannelValue>(data: &ColorVariant<C, ColorVecDataInner>, head: &Head, writer: &mut impl Write) -> Result<(), WriteError> {
+    match data {
+        ColorVariant::L   (data) => write_interleaved_float_colors(data, head, writer)?,
+        ColorVariant::Rgb (data) => write_interleaved_float_colors(data, head, writer)?,
+        ColorVariant::Rgba(data) => write_interleaved_float_colors(data, head, writer)?,
+    }
+
+    Ok(())
+}
+
+#[inline]
+pub fn write_interleaved_float_colors<Color, ChannelValue>(data: &[Color], head: &Head, writer: &mut impl Write) -> std::io::Result<()>
+where ChannelValue: crate::color::ChannelValue,
+      Color: crate::color::Color<ChannelValue>,
+{
+    let width = head.width() as usize;
+    let planes = head.planes();
+    let channels = Color::CHANNELS as usize;
+    let color_len = ChannelValue::SIZE as usize * channels;
+    let mut buf = Vec::with_capacity(width * color_len);
+
+    for row in data.chunks(width) {
+        buf.clear();
+        for color in row {
+            color.write_to(&mut buf)?;
+        }
+        for channel in 0..channels {
+            for plane in 0..planes {
+                let mut byte = 0u8;
+                let mut bit = 0;
+                let byte_index = plane / 8;
+                let bit_index  = plane % 8;
+                for x in 0..width {
+                    if bit == 8 {
+                        writer.write_all(&[byte])?;
+                        bit = 0;
+                    }
+                    let color_byte = buf[x * color_len + ChannelValue::SIZE as usize * channel + byte_index as usize];
+                    let value = (color_byte >> bit_index) & 1;
+                    byte |= value << (7 - bit);
+                    bit += 1;
+                }
+
+                if bit != 0 {
+                    // fill rest of byte with same pattern as start of byte
+                    match bit {
+                        1 => { byte |= byte >> 1 | byte >> 2 | byte >> 3 | byte >> 4 | byte >> 5 | byte >> 6 | byte >> 7; }
+                        2 => { byte |= byte >> 2 | byte >> 4 | byte >> 6; }
+                        3 => { byte |= byte >> 3 | byte >> 6; }
+                        4 => { byte |= byte >> 4; }
+                        5 => { byte |= byte >> 5; }
+                        6 => { byte |= byte >> 6; }
+                        7 => { byte |= byte >> 7; }
+                        _ => {}
+                    }
+                    writer.write_all(&[byte])?;
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -167,7 +241,17 @@ where ChannelValue: crate::color::IntChannelValue,
                 }
 
                 if bit != 0 {
-                    // TODO: fill rest of byte with same pattern as start of byte
+                    // fill rest of byte with same pattern as start of byte
+                    match bit {
+                        1 => { byte |= byte >> 1 | byte >> 2 | byte >> 3 | byte >> 4 | byte >> 5 | byte >> 6 | byte >> 7; }
+                        2 => { byte |= byte >> 2 | byte >> 4 | byte >> 6; }
+                        3 => { byte |= byte >> 3 | byte >> 6; }
+                        4 => { byte |= byte >> 4; }
+                        5 => { byte |= byte >> 5; }
+                        6 => { byte |= byte >> 6; }
+                        7 => { byte |= byte >> 7; }
+                        _ => {}
+                    }
                     writer.write_all(&[byte])?;
                 }
             }
