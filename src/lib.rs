@@ -1,6 +1,5 @@
 pub mod chunks;
 pub mod color;
-pub mod builder;
 pub mod format;
 pub mod error;
 pub mod io;
@@ -8,22 +7,78 @@ pub mod io;
 use std::io::{Read, Seek, Write};
 
 use chunks::{Body, ChunkWrite, Foot, Indx, Meta, Xmet};
-use error::{IllegalDate, ReadError, ReadErrorKind, WriteError, WriteErrorKind};
+use error::{IllegalDate, InvalidParams, ReadError, ReadErrorKind, WriteError, WriteErrorKind};
 use flate2::{bufread::ZlibDecoder, write::ZlibEncoder, Compression};
 use format::{ChannelValueType, ColorType, Format, NumberType};
 use io::{read_fourcc, read_u32, read_u64, read_u8};
 
 #[derive(Debug)]
 pub struct Head {
-    pub(crate) flags: u8,
-    pub(crate) channels: u8,
-    pub(crate) planes: u8,
-    pub(crate) index_planes: u8,
-    pub(crate) width: u32,
-    pub(crate) height: u32,
+    flags: u8,
+    channels: u8,
+    planes: u8,
+    index_planes: u8,
+    width: u32,
+    height: u32,
+}
+
+#[inline]
+pub fn is_valid_planes(number_type: NumberType, interleaved: bool, planes: u8) -> bool {
+    if number_type.is_float() {
+        return matches!(planes, 32 | 64);
+    }
+
+    if interleaved {
+        return planes > 0 && planes <= 128;
+    }
+
+    return matches!(planes, 1 | 4 | 8 | 16 | 32 | 64 | 128);
 }
 
 impl Head {
+    #[inline]
+    pub fn new(number_type: NumberType, interleaved: bool, color_type: ColorType, planes: u8, index_planes: u8, width: u32, height: u32) -> Result<Self, InvalidParams> {
+        let mut flags = 0;
+        if number_type.is_float() {
+            flags |= XZIB::FLOAT;
+        }
+
+        if interleaved {
+            flags |= XZIB::INTERLEAVED;
+        }
+
+        if !is_valid_planes(number_type, interleaved, planes) {
+            return Err(InvalidParams::with_message(
+                format!("invalid planes for {} {}: {}",
+                    if interleaved { "interleaved" } else { "non-interleaved" },
+                    number_type, planes
+                )
+            ));
+        }
+
+        if index_planes != 0 && !is_valid_planes(number_type, false, index_planes) {
+            return Err(InvalidParams::with_message(
+                format!("invalid index planes for {}: {}",
+                    number_type, planes
+                )
+            ));
+        }
+
+        if width == 0 || height == 0 {
+            return Err(InvalidParams::with_message(
+                format!("width and height must be non-zero, but was: {width} x {height}")));
+        }
+
+        Ok(Self {
+            flags,
+            channels: color_type.channels(),
+            planes,
+            index_planes,
+            width,
+            height,
+        })
+    }
+
     #[inline]
     pub fn is_interleaved(&self) -> bool {
         self.flags & XZIB::INTERLEAVED != 0
@@ -144,19 +199,31 @@ impl Head {
 
 #[derive(Debug)]
 pub struct XZIB {
-    pub(crate) head: Head,
+    head: Head,
 
-    pub(crate) indx: Option<Indx>,
-    pub(crate) meta: Option<Meta>,
-    pub(crate) xmet: Option<Xmet>,
-    pub(crate) body: Option<Body>,
-    pub(crate) foot: Option<Foot>,
+    indx: Option<Indx>,
+    meta: Option<Meta>,
+    xmet: Option<Xmet>,
+    body: Option<Body>,
+    foot: Option<Foot>,
 }
 
 impl XZIB {
     pub const INTERLEAVED: u8 = 1;
     pub const FLOAT: u8 = 2;
     pub const FOURCC: [u8; 4] = *b"XZIB";
+
+    #[inline]
+    pub fn new(head: Head) -> Self {
+        Self {
+            head,
+            indx: None,
+            meta: None,
+            xmet: None,
+            body: None,
+            foot: None,
+        }
+    }
 
     #[inline]
     pub fn head(&self) -> &Head {
@@ -186,6 +253,31 @@ impl XZIB {
     #[inline]
     pub fn foot(&self) -> Option<&Foot> {
         self.foot.as_ref()
+    }
+
+    #[inline]
+    pub fn indx_mut(&mut self) -> &mut Option<Indx> {
+        &mut self.indx
+    }
+
+    #[inline]
+    pub fn meta_mut(&mut self) -> &mut Option<Meta> {
+        &mut self.meta
+    }
+
+    #[inline]
+    pub fn xmet_mut(&mut self) -> &mut Option<Xmet> {
+        &mut self.xmet
+    }
+
+    #[inline]
+    pub fn body_mut(&mut self) -> &mut Option<Body> {
+        &mut self.body
+    }
+
+    #[inline]
+    pub fn foot_mut(&mut self) -> &mut Option<Foot> {
+        &mut self.foot
     }
 
     pub fn read<R>(reader: &mut R) -> Result<Self, ReadError>

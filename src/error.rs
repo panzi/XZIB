@@ -161,13 +161,15 @@ macro_rules! make_error {
 
     (@impl $error_name:ident $kind_name:ident) => {};
 
-    (@impl $error_name:ident $kind_name:ident impl $kind_value:ident : $err_head:ident $(:: $err_tail:ident)*; $(tail:tt)*) => {
+    (@impl $error_name:ident $kind_name:ident impl $kind_value:ident : $err_head:ident $(:: $err_tail:ident)*; $($tail:tt)*) => {
         impl From<$err_head $(:: $err_tail)*> for $error_name {
             #[inline]
             fn from(value: $err_head $(:: $err_tail)*) -> Self {
                 Self::with_source($kind_name::$kind_value, Box::new(value))
             }
         }
+
+        make_error! { @impl $error_name $kind_name $($tail)*}
     };
 }
 
@@ -179,6 +181,8 @@ make_error! {
         BrokenFile,
     }
     impl IO: std::io::Error;
+    impl BrokenFile: IllegalDate;
+    impl BrokenFile: IllegalMetaKey;
 }
 
 make_error! {
@@ -198,4 +202,9 @@ make_error! {
         InvalidParams
     }
     impl IO: std::io::Error;
+    impl InvalidParams: InvalidParams;
+}
+
+make_error! {
+    InvalidParams
 }
