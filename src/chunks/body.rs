@@ -108,6 +108,75 @@ pub const LOOKUP_16: [fn(u16) -> u16; 16] = [
     /* 16 */ |x: u16| x,
 ];
 
+pub fn write_interleaved_colors_varant(data: &ColorList, head: &Head, writer: &mut impl Write) -> Result<(), WriteError> {
+    let planes = head.planes();
+    if planes > data.channel_value_type().planes() {
+        // TODO: error? zero padding?
+        todo!()
+    }
+    match data {
+        ChannelVariant::U8  (data) => write_interleaved_int_colors_variant_inner(data, head, writer)?,
+        ChannelVariant::U16 (data) => write_interleaved_int_colors_variant_inner(data, head, writer)?,
+        ChannelVariant::U32 (data) => write_interleaved_int_colors_variant_inner(data, head, writer)?,
+        ChannelVariant::U64 (data) => write_interleaved_int_colors_variant_inner(data, head, writer)?,
+        ChannelVariant::U128(data) => write_interleaved_int_colors_variant_inner(data, head, writer)?,
+        ChannelVariant::F32(data) if planes == 32 => { todo!() }
+        ChannelVariant::F64(data) if planes == 64 => { todo!() }
+        _ => return Err(WriteError::with_message(
+            WriteErrorKind::InvalidParams,
+            format!("unsupported color format: {} {planes}", if head.is_float() { "float" } else { "int" })))
+    }
+    Ok(())
+}
+
+#[inline]
+pub fn write_interleaved_int_colors_variant_inner<C: IntChannelValue>(data: &ColorVariant<C, ColorVecDataInner>, head: &Head, writer: &mut impl Write) -> Result<(), WriteError> {
+    match data {
+        ColorVariant::L   (data) => write_interleaved_int_colors(data, head, writer)?,
+        ColorVariant::Rgb (data) => write_interleaved_int_colors(data, head, writer)?,
+        ColorVariant::Rgba(data) => write_interleaved_int_colors(data, head, writer)?,
+    }
+
+    Ok(())
+}
+
+#[inline]
+pub fn write_interleaved_int_colors<Color, ChannelValue>(data: &[Color], head: &Head, writer: &mut impl Write) -> std::io::Result<()>
+where ChannelValue: crate::color::IntChannelValue,
+      Color: crate::color::Color<ChannelValue>,
+{
+    let width = head.width() as usize;
+    let planes = head.planes();
+    let channels = Color::CHANNELS as usize;
+    let shift = ChannelValue::BITS - planes as u32;
+
+    for row in data.chunks(width) {
+        for channel in 0..channels {
+            for plane in 0..planes {
+                let mut byte = 0u8;
+                let mut bit = 0;
+                for color in row {
+                    if bit == 8 {
+                        writer.write_all(&[byte])?;
+                        bit = 0;
+                    }
+                    let value = color.channels()[channel] >> shift;
+                    let value = (value >> (ChannelValue::BITS - 1 - plane as u32)).least_significant_byte() & 1u8;
+                    byte |= value << (7 - bit);
+                    bit += 1;
+                }
+
+                if bit != 0 {
+                    // TODO: fill rest of byte with same pattern as start of byte
+                    writer.write_all(&[byte])?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub fn read_interleaved_colors(bytes: &[u8], is_float: bool, planes: u8, channels: u8, width: u32, height: u32) -> Result<ColorList, ReadError> {
     if is_float {
         return match planes {

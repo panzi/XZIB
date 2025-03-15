@@ -56,6 +56,8 @@ where Self: ChannelValue,
 
         (self << lshift) | (self >> rshift)
     }
+
+    fn least_significant_byte(self) -> u8;
 }
 
 impl ChannelValue for u8 {
@@ -185,12 +187,40 @@ impl IntChannelValue for u8 {
             }
         }
     }
+
+    #[inline]
+    fn least_significant_byte(self) -> u8 {
+        self as u8
+    }
 }
 
-impl IntChannelValue for u16 {}
-impl IntChannelValue for u32 {}
-impl IntChannelValue for u64 {}
-impl IntChannelValue for u128 {}
+impl IntChannelValue for u16 {
+    #[inline]
+    fn least_significant_byte(self) -> u8 {
+        self as u8
+    }
+}
+
+impl IntChannelValue for u32 {
+    #[inline]
+    fn least_significant_byte(self) -> u8 {
+        self as u8
+    }
+}
+
+impl IntChannelValue for u64 {
+    #[inline]
+    fn least_significant_byte(self) -> u8 {
+        self as u8
+    }
+}
+
+impl IntChannelValue for u128 {
+    #[inline]
+    fn least_significant_byte(self) -> u8 {
+        self as u8
+    }
+}
 
 // TODO: how to #[cfg()] check this?
 //impl ChannelValue for f16 {}
