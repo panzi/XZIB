@@ -27,7 +27,7 @@ impl Indx {
         if index_planes == 0 {
             return Err(ReadError::with_message(
                 ReadErrorKind::BrokenFile,
-                format!("indx chunk found, but index_planes == 0")
+                format!("INDX chunk found, but index_planes == 0")
             ));
         }
 

@@ -510,9 +510,9 @@ impl XZIB {
         Ok(())
     }
 
-    fn write_chunk(&self, mut buf: &mut Vec<u8>, writer: &mut impl Write, chunk: &impl ChunkWrite, compression: Compression) -> Result<(), WriteError> {
+    fn write_chunk<CW: ChunkWrite>(&self, mut buf: &mut Vec<u8>, writer: &mut impl Write, chunk: &CW, compression: Compression) -> Result<(), WriteError> {
         buf.clear();
-        let mut fourcc = Indx::FOURCC;
+        let mut fourcc = CW::FOURCC;
         if compression.level() > 0 {
             let mut encoder = ZlibEncoder::new(&mut buf, compression);
             chunk.write(&self.head, &mut encoder)?;

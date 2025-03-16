@@ -20,27 +20,27 @@ enum Command {
         #[clap(short, long, default_value = None)]
         planes: Option<u8>,
 
-        #[clap(short, long, default_value_t = true)]
+        #[clap(short, long, default_value_t = true, num_args = 1)]
         interleaved: bool,
 
-        #[clap(index = 0)]
+        #[clap()]
         input: PathBuf,
 
-        #[clap(index = 1)]
+        #[clap()]
         output: PathBuf,
     },
 
     Decode {
-        #[clap(index = 0)]
+        #[clap()]
         input: PathBuf,
 
-        #[clap(index = 1)]
+        #[clap()]
         output: PathBuf,
     },
 
     Info {
         files: Vec<PathBuf>,
-    }
+    },
 }
 
 make_error! {
@@ -177,6 +177,8 @@ pub fn main() -> Result<(), CliError> {
                 height)?);
 
             *xzib.body_mut() = Some(Body::with_data(data));
+
+            print_info(&xzib);
 
             xzib.write(
                 &mut BufWriter::new(File::create(output)?),
@@ -383,83 +385,7 @@ pub fn main() -> Result<(), CliError> {
                     Ok(fp) => {
                         match XZIB::read(&mut BufReader::new(fp)) {
                             Ok(xzib) => {
-                                let header = xzib.head();
-
-                                println!("dimensions:       {} x {}", header.width(), header.height());
-                                println!("number type:      {}", header.number_type());
-                                println!("channels:         {:3}", header.channels());
-                                println!("bit planes:       {:3}", header.planes());
-                                println!("index bit planes: {:3}", header.index_planes());
-                                println!("interleaved:      {}", header.is_interleaved());
-
-                                if let Some(meta) = xzib.meta() {
-                                    println!();
-                                    println!("META:");
-
-                                    if !meta.title().is_empty() {
-                                        println!("  title: {:?}", meta.title());
-                                    }
-
-                                    if !meta.author().is_empty() {
-                                        println!("  author:");
-                                        for author in meta.author() {
-                                            println!("  - {:?}", author.as_ref());
-                                        }
-                                    }
-
-                                    if !meta.created_at().is_null() {
-                                        println!("  created_at: {}", meta.created_at());
-                                    }
-
-                                    if !meta.license().is_empty() {
-                                        println!("  license:");
-                                        for license in meta.license() {
-                                            println!("  - {:?}", license.as_ref());
-                                        }
-                                    }
-
-                                    if !meta.links().is_empty() {
-                                        println!("  links:");
-                                        for links in meta.links() {
-                                            println!("  - {:?}", links.as_ref());
-                                        }
-                                    }
-
-                                    if !meta.comment().is_empty() {
-                                        println!("  comment: |");
-                                        for line in meta.comment().split("\n") {
-                                            println!("    {line}");
-                                        }
-                                    }
-                                }
-
-                                if let Some(xmet) = xzib.xmet() {
-                                    println!();
-                                    println!("XMET:");
-
-                                    for (key, values) in xmet.data() {
-                                        match values.len() {
-                                            0 => {}
-                                            1 => {
-                                                let value = &values[0];
-                                                if value.contains("\n") {
-                                                    println!("  {key}: |");
-                                                    for line in value.split("\n") {
-                                                        println!("    {line}");
-                                                    }
-                                                } else {
-                                                    println!("  {key}: {value:?}");
-                                                }
-                                            }
-                                            _ => {
-                                                println!("  {key}:");
-                                                for value in values {
-                                                    println!("  - {value:?}");
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
+                                print_info(&xzib);
                             }
                             Err(err) => {
                                 eprintln!("Error reading file: {err}");
@@ -473,6 +399,105 @@ pub fn main() -> Result<(), CliError> {
             }
         }
     }
-    
+
     Ok(())
+}
+
+fn print_info(xzib: &XZIB) {
+    let header = xzib.head();
+
+    println!("dimensions:       {} x {}", header.width(), header.height());
+    println!("number type:      {}", header.number_type());
+    println!("channels:         {:3}", header.channels());
+    println!("bit planes:       {:3}", header.planes());
+    println!("index bit planes: {:3}", header.index_planes());
+    println!("interleaved:      {}", header.is_interleaved());
+
+    let mut chunks = Vec::with_capacity(5);
+    if xzib.indx().is_some() {
+        chunks.push("INDX");
+    }
+    if xzib.meta().is_some() {
+        chunks.push("META");
+    }
+    if xzib.xmet().is_some() {
+        chunks.push("XMET");
+    }
+    if xzib.body().is_some() {
+        chunks.push("BODY");
+    }
+    if xzib.foot().is_some() {
+        chunks.push("FOOT");
+    }
+
+    println!("chunks: {}", chunks.join(", "));
+
+    if let Some(meta) = xzib.meta() {
+        println!();
+        println!("META:");
+
+        if !meta.title().is_empty() {
+            println!("  title: {:?}", meta.title());
+        }
+
+        if !meta.author().is_empty() {
+            println!("  author:");
+            for author in meta.author() {
+                println!("  - {:?}", author.as_ref());
+            }
+        }
+
+        if !meta.created_at().is_null() {
+            println!("  created_at: {}", meta.created_at());
+        }
+
+        if !meta.license().is_empty() {
+            println!("  license:");
+            for license in meta.license() {
+                println!("  - {:?}", license.as_ref());
+            }
+        }
+
+        if !meta.links().is_empty() {
+            println!("  links:");
+            for links in meta.links() {
+                println!("  - {:?}", links.as_ref());
+            }
+        }
+
+        if !meta.comment().is_empty() {
+            println!("  comment: |");
+            for line in meta.comment().split("\n") {
+                println!("    {line}");
+            }
+        }
+    }
+
+    if let Some(xmet) = xzib.xmet() {
+        println!();
+        println!("XMET:");
+
+        for (key, values) in xmet.data() {
+            match values.len() {
+                0 => {}
+                1 => {
+                    let value = &values[0];
+                    if value.contains("\n") {
+                        println!("  {key}: |");
+                        for line in value.split("\n") {
+                            println!("    {line}");
+                        }
+                    } else {
+                        println!("  {key}: {value:?}");
+                    }
+                }
+                _ => {
+                    println!("  {key}:");
+                    for value in values {
+                        println!("  - {value:?}");
+                    }
+                }
+            }
+        }
+    }
 }
