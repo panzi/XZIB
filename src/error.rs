@@ -1,6 +1,83 @@
 #[macro_export]
 macro_rules! make_error {
-    ($error_name:ident $({ $($field:ident: $field_type:ident $(:: $field_type_tail:ident)*),* $(,)? })? $(enum $kind_name:ident $(impl $impl_kind_value:ident : $err_head:ident $(:: $err_tail:ident)*; )*)?) => {
+    ($error_name:ident; $(struct $inner_name:ident { $($field:ident: $field_type:ident $(:: $field_type_tail:ident)*),* $(,)? })? enum $kind_name:ident { $($kind_value:ident),* $(,)? } $(impl $impl_kind_value:ident : $err_head:ident $(:: $err_tail:ident)*; )*) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        pub enum $kind_name {
+            $($kind_value),*
+        }
+
+        make_error! { @declare $error_name; $(struct $inner_name)? { kind: $kind_name, $( $($field: $field_type $(:: $field_type_tail)*,)* )? } enum $kind_name $(impl $impl_kind_value : $err_head $(:: $err_tail)*; )* }
+    };
+
+    ($error_name:ident; $(struct $inner_name:ident { $($field:ident: $field_type:ident $(:: $field_type_tail:ident)*),* $(,)? })?) => {
+        make_error! { @declare $error_name; $(struct $inner_name)? { $( $($field: $field_type $(:: $field_type_tail)*,)* )? } }
+    };
+
+    (@declare $error_name:ident; struct $inner_name:ident $({ $($field:ident: $field_type:ident $(:: $field_type_tail:ident)*),* $(,)? })? $(enum $kind_name:ident $(impl $impl_kind_value:ident : $err_head:ident $(:: $err_tail:ident)*; )*)?) => {
+        #[derive(Debug)]
+        struct $inner_name {
+            $(
+                $($field: $field_type $(:: $field_type_tail)*, )*
+            )?
+            message: Option<String>,
+            source: Option<Box<dyn std::error::Error>>,
+        }
+
+        #[derive(Debug)]
+        pub struct $error_name {
+            inner: Box<$inner_name>,
+        }
+
+        impl $error_name {
+            #[inline]
+            pub fn new($($($field: $field_type $(:: $field_type_tail)*),*)?) -> Self {
+                Self { inner: Box::new($inner_name { $($($field,)*)? message: None, source: None }) }
+            }
+
+            #[inline]
+            pub fn with_message($($($field: $field_type $(:: $field_type_tail)*, )*)? message: impl Into<String>) -> Self {
+                Self { inner: Box::new($inner_name { $($($field,)*)? message: Some(message.into()), source: None }) }
+            }
+
+            #[inline]
+            pub fn with_source($($($field: $field_type $(:: $field_type_tail)*, )*)? source: Box<dyn std::error::Error>) -> Self {
+                Self { inner: Box::new($inner_name { $($($field,)*)? message: None, source: Some(source) }) }
+            }
+
+            #[inline]
+            pub fn with_all($($($field: $field_type $(:: $field_type_tail)*, )*)? message: impl Into<String>, source: Box<dyn std::error::Error>) -> Self {
+                Self { inner: Box::new($inner_name { $($($field,)*)? message: Some(message.into()), source: Some(source) }) }
+            }
+
+            #[inline]
+            pub fn message(&self) -> Option<&str> {
+                let Some(message) = &self.inner.message else {
+                    return None;
+                };
+                Some(message)
+            }
+
+            $($(
+                #[inline]
+                pub fn $field(&self) -> $field_type $(:: $field_type_tail)* {
+                    self.inner.$field
+                }
+            )*)?
+        }
+
+        make_error!(@display @inner $error_name $(enum $kind_name)?);
+
+        impl std::error::Error for $error_name {
+            #[inline]
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                self.inner.source.as_deref()
+            }
+        }
+
+        $(make_error! { @impl $error_name enum $kind_name $(impl $impl_kind_value : $err_head $(:: $err_tail)*; )* })?
+    };
+
+    (@declare $error_name:ident; $({ $($field:ident: $field_type:ident $(:: $field_type_tail:ident)*),* $(,)? })? $(enum $kind_name:ident $(impl $impl_kind_value:ident : $err_head:ident $(:: $err_tail:ident)*; )*)?) => {
         #[derive(Debug)]
         pub struct $error_name {
             $(
@@ -59,14 +136,22 @@ macro_rules! make_error {
         $(make_error! { @impl $error_name enum $kind_name $(impl $impl_kind_value : $err_head $(:: $err_tail)*; )* })?
     };
 
-    (@display $error_name:ident) => {
+    (@get @inner $obj:ident $field:ident) => {
+        $obj.inner.$field
+    };
+
+    (@get $obj:ident $field:ident) => {
+        $obj.$field
+    };
+
+    (@display $(@$flag:ident)? $error_name:ident) => {
         impl std::fmt::Display for $error_name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                if let Some(message) = &self.message {
+                if let Some(message) = &make_error!(@get $(@$flag)? self message) {
                     message.fmt(f)?;
                 }
 
-                if let Some(source) = &self.source {
+                if let Some(source) = &make_error!(@get $(@$flag)? self source) {
                     write!(f, ": {:?}", source)?;
                 }
 
@@ -75,31 +160,22 @@ macro_rules! make_error {
         }
     };
 
-    (@display $error_name:ident $(enum $kind_name:ident)?) => {
+    (@display $(@$flag:ident)? $error_name:ident $(enum $kind_name:ident)?) => {
         impl std::fmt::Display for $error_name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                if let Some(message) = &self.message {
-                    write!(f, "[{:?}] {message}", self.kind)?;
+                if let Some(message) = &make_error!(@get $(@$flag)? self message) {
+                    write!(f, "[{:?}] {message}", make_error!(@get $(@$flag)? self kind))?;
                 } else {
-                    write!(f, "{:?}", self.kind)?;
+                    write!(f, "{:?}", make_error!(@get $(@$flag)? self kind))?;
                 }
 
-                if let Some(source) = &self.source {
+                if let Some(source) = &make_error!(@get $(@$flag)? self source) {
                     write!(f, ": {:?}", source)?;
                 }
 
                 Ok(())
             }
         }
-    };
-
-    ($error_name:ident $({ $($field:ident: $field_type:ident $(:: $field_type_tail:ident)*),* $(,)? })? enum $kind_name:ident { $($kind_value:ident),* $(,)? } $(impl $impl_kind_value:ident : $err_head:ident $(:: $err_tail:ident)*; )*) => {
-        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-        pub enum $kind_name {
-            $($kind_value),*
-        }
-
-        make_error! { $error_name { kind: $kind_name, $( $($field: $field_type $(:: $field_type_tail)*,)* )? } enum $kind_name $(impl $impl_kind_value : $err_head $(:: $err_tail)*; )* }
     };
 
     (@impl $error_name:ident enum $kind_name:ident) => {};
@@ -117,7 +193,8 @@ macro_rules! make_error {
 }
 
 make_error! {
-    ReadError
+    ReadError;
+    struct ReadErrorInner {}
     enum ReadErrorKind {
         IO,
         Unsupported,
@@ -129,17 +206,20 @@ make_error! {
 }
 
 make_error! {
-    IllegalMetaKey {
+    IllegalMetaKey;
+    struct IllegalMetaKeyInner {
         key: u8
     }
 }
 
 make_error! {
-    IllegalDate
+    IllegalDate;
+    struct IllegalDateInner {}
 }
 
 make_error! {
-    WriteError
+    WriteError;
+    struct WriteErrorInner {}
     enum WriteErrorKind {
         IO,
         InvalidParams
@@ -149,5 +229,6 @@ make_error! {
 }
 
 make_error! {
-    InvalidParams
+    InvalidParams;
+    struct InvalidParamsInner {}
 }

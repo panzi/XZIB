@@ -44,7 +44,8 @@ enum Command {
 }
 
 make_error! {
-    CliError
+    CliError;
+    struct CliErrorInner {}
     enum CliErrorKind {
         IO,
         Image,
