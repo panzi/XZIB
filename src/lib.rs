@@ -4,9 +4,10 @@ pub mod format;
 pub mod error;
 pub mod io;
 
-use std::io::{Read, Seek, Write};
+use std::{borrow::Cow, io::{Read, Seek, Write}};
 
 use chunks::{Body, ChunkWrite, Foot, Indx, Meta, Xmet};
+use color::{apply_palette_variant, ChannelVariant, ColorList, ColorVariant};
 use error::{IllegalDate, InvalidParams, ReadError, ReadErrorKind, WriteError, WriteErrorKind};
 use flate2::{bufread::ZlibDecoder, write::ZlibEncoder, Compression};
 use format::{ChannelValueType, ColorType, Format, NumberType};
@@ -90,6 +91,16 @@ impl Head {
     }
 
     #[inline]
+    pub fn is_integer(&self) -> bool {
+        self.flags & XZIB::FLOAT == 0
+    }
+
+    #[inline]
+    pub fn is_indexed(&self) -> bool {
+        self.index_planes > 0
+    }
+
+    #[inline]
     pub fn number_type(&self) -> NumberType {
         if self.is_float() {
             NumberType::Float
@@ -99,29 +110,28 @@ impl Head {
     }
 
     #[inline]
-    pub fn channel_value_type(&self) -> Option<ChannelValueType> {
+    pub fn channel_value_type(&self) -> Result<ChannelValueType, InvalidParams> {
         ChannelValueType::from_planes(self.number_type(), self.planes)
     }
 
     #[inline]
-    pub fn index_channel_value_type(&self) -> Option<ChannelValueType> {
-        ChannelValueType::from_planes(self.number_type(), self.index_planes)
+    pub fn index_channel_value_type(&self) -> Result<Option<ChannelValueType>, InvalidParams> {
+        if self.index_planes == 0 {
+            return Ok(None);
+        }
+        ChannelValueType::from_planes(self.number_type(), self.index_planes).map(Some)
     }
 
     #[inline]
-    pub fn color_type(&self) -> Option<ColorType> {
+    pub fn color_type(&self) -> Result<ColorType, InvalidParams> {
         ColorType::from_channels(self.channels)
     }
 
     #[inline]
-    pub fn format(&self) -> Option<Format> {
-        let Some(channel_value_type) = self.channel_value_type() else {
-            return None;
-        };
-        let Some(color_type) = self.color_type() else {
-            return None;
-        };
-        Some(Format(channel_value_type, color_type))
+    pub fn format(&self) -> Result<Format, InvalidParams> {
+        let channel_value_type = self.channel_value_type()?;
+        let color_type = self.color_type()?;
+        Ok(Format(channel_value_type, color_type))
     }
 
     #[inline]
@@ -280,6 +290,47 @@ impl XZIB {
         &mut self.foot
     }
 
+    pub fn image_buffer(&self) -> Option<Cow<ColorList>> {
+        let Some(body) = &self.body else {
+            return None;
+        };
+
+        let data = body.data();
+
+        if let Some(indx) = &self.indx {
+            match data {
+                ChannelVariant::U8(data) => {
+                    if let ColorVariant::L(data) = data {
+                        return Some(Cow::Owned(apply_palette_variant(data, indx.colors())))
+                    }
+                }
+                ChannelVariant::U16(data) => {
+                    if let ColorVariant::L(data) = data {
+                        return Some(Cow::Owned(apply_palette_variant(data, indx.colors())))
+                    }
+                }
+                ChannelVariant::U32(data) => {
+                    if let ColorVariant::L(data) = data {
+                        return Some(Cow::Owned(apply_palette_variant(data, indx.colors())))
+                    }
+                }
+                ChannelVariant::U64(data) => {
+                    if let ColorVariant::L(data) = data {
+                        return Some(Cow::Owned(apply_palette_variant(data, indx.colors())))
+                    }
+                }
+                ChannelVariant::U128(data) => {
+                    if let ColorVariant::L(data) = data {
+                        return Some(Cow::Owned(apply_palette_variant(data, indx.colors())))
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Some(Cow::Borrowed(data))
+    }
+
     pub fn read<R>(reader: &mut R) -> Result<Self, ReadError>
     where R: Read + Seek {
         let head = Head::read(reader)?;
@@ -375,10 +426,12 @@ impl XZIB {
         })
     }
 
-    pub fn write(&self, writer: &mut impl Write, compression: Compression) -> Result<(), WriteError> {
+    pub fn write(&self, writer: &mut impl Write, compression: u32) -> Result<(), WriteError> {
         self.head.write(writer)?;
 
         let mut buf = Vec::new();
+
+        let compression = Compression::new(compression);
 
         if let Some(indx) = &self.indx {
             self.write_chunk(&mut buf, writer, indx, compression)?;

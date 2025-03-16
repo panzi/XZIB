@@ -5,3 +5,18 @@ edition = "2024"
 
 [dependencies]
 flate2 = { version = "1.1.0", features = ["zlib-rs"] }
+image = { version = "0.25.5", optional = true }
+clap = { version = "4.5.28", features = ["derive"], optional = true }
+
+[lib]
+name = "xzib"
+path = "src/lib.rs"
+
+[features]
+default = ["binary"]
+binary = ["image", "clap"]
+
+[[bin]]
+name = "xzib"
+path = "src/main.rs"
+required-features = ["binary"]

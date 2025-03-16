@@ -1,3 +1,4 @@
+#[macro_export]
 macro_rules! make_error {
     ($error_name:ident $({ $($field:ident: $field_type:ident $(:: $field_type_tail:ident)*),* $(,)? })?) => {
         #[derive(Debug)]

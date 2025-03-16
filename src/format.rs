@@ -1,4 +1,4 @@
-use crate::color::{ChannelValue, ChannelVariant, ColorList, ColorVariant, ColorVecDataInner};
+use crate::{color::{ChannelValue, ChannelVariant, ColorList, ColorVariant, ColorVecDataInner}, error::InvalidParams};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NumberType {
@@ -36,20 +36,28 @@ pub enum ChannelValueType {
 
 impl ChannelValueType {
     #[inline]
-    pub fn from_planes(number_type: NumberType, planes: u8) -> Option<Self> {
+    pub fn from_planes(number_type: NumberType, planes: u8) -> Result<Self, InvalidParams> {
         match number_type {
             NumberType::Integer => {
-                if planes <= 8 { Some(Self::U8) }
-                else if planes <= 16 { Some(Self::U16) }
-                else if planes <= 32 { Some(Self::U32) }
-                else if planes <= 64 { Some(Self::U64) }
-                else if planes <= 128 { Some(Self::U128) }
-                else { None }
+                if planes <= 8 { Ok(Self::U8) }
+                else if planes <= 16 { Ok(Self::U16) }
+                else if planes <= 32 { Ok(Self::U32) }
+                else if planes <= 64 { Ok(Self::U64) }
+                else if planes <= 128 { Ok(Self::U128) }
+                else {
+                    Err(InvalidParams::with_message(
+                        format!("invalid number of planes for number type {}: {}", number_type, planes)
+                    ))
+                }
             }
             NumberType::Float => {
-                if planes <= 32 { Some(Self::F32) }
-                else if planes <= 64 { Some(Self::F64) }
-                else { None }
+                if planes <= 32 { Ok(Self::F32) }
+                else if planes <= 64 { Ok(Self::F64) }
+                else {
+                    Err(InvalidParams::with_message(
+                        format!("invalid number of planes for number type {}: {}", number_type, planes)
+                    ))
+                }
             }
         }
     }
@@ -89,17 +97,17 @@ impl std::fmt::Display for ChannelValueType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ColorType {
-    L, Rgb, Rgba
+    L, La, Rgb, Rgba
 }
 
 impl ColorType {
     #[inline]
-    pub fn from_channels(channels: u8) -> Option<Self> {
+    pub fn from_channels(channels: u8) -> Result<Self, InvalidParams> {
         match channels {
-            1 => Some(Self::L),
-            3 => Some(Self::Rgb),
-            4 => Some(Self::Rgba),
-            _ => None,
+            1 => Ok(Self::L),
+            3 => Ok(Self::Rgb),
+            4 => Ok(Self::Rgba),
+            _ => Err(InvalidParams::with_message(format!("invalid number of channels: {channels}"))),
         }
     }
 
@@ -107,6 +115,7 @@ impl ColorType {
     pub fn channels(self) -> u8 {
         match self {
             Self::L    => 1,
+            Self::La   => 2,
             Self::Rgb  => 3,
             Self::Rgba => 4,
         }
@@ -118,6 +127,7 @@ impl std::fmt::Display for ColorType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::L    => "L".fmt(f),
+            Self::La   => "LA".fmt(f),
             Self::Rgb  => "RGB".fmt(f),
             Self::Rgba => "RGBA".fmt(f),
         }
@@ -129,22 +139,18 @@ pub struct Format(pub ChannelValueType, pub ColorType);
 
 impl Format {
     #[inline]
-    pub fn from_components(number_type: NumberType, planes: u8, channels: u8) -> Option<Self> {
-        let Some(channel_value_type) = ChannelValueType::from_planes(number_type, planes) else {
-            return None;
-        };
+    pub fn from_components(number_type: NumberType, planes: u8, channels: u8) -> Result<Self, InvalidParams> {
+        let channel_value_type = ChannelValueType::from_planes(number_type, planes)?;
+        let color_type = ColorType::from_channels(channels)?;
 
-        let Some(color_type) = ColorType::from_channels(channels) else {
-            return None;
-        };
-
-        Some(Format(channel_value_type, color_type))
+        Ok(Format(channel_value_type, color_type))
     }
 
     #[inline]
     fn make_color_list_inner<C: ChannelValue>(color_type: ColorType) -> ColorVariant<C, ColorVecDataInner> {
         match color_type {
             ColorType::L    => ColorVariant::L   (Vec::new()),
+            ColorType::La   => ColorVariant::La  (Vec::new()),
             ColorType::Rgb  => ColorVariant::Rgb (Vec::new()),
             ColorType::Rgba => ColorVariant::Rgba(Vec::new()),
         }

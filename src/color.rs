@@ -266,13 +266,17 @@ impl ChannelValue for f64 {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[repr(transparent)]
+pub struct La<C: ChannelValue>(pub [C; 2]);
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[repr(transparent)]
 pub struct Rgb<C: ChannelValue>(pub [C; 3]);
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct Rgba<C: ChannelValue>(pub [C; 4]);
 
-pub trait Color<C: ChannelValue>: std::fmt::Debug + Sized {
+pub trait Color<C: ChannelValue>: std::fmt::Debug + Sized + Default + Clone {
     const CHANNELS: u8;
 
     fn to_rgb(&self) -> Rgb<C>;
@@ -288,6 +292,45 @@ pub trait Color<C: ChannelValue>: std::fmt::Debug + Sized {
         }
 
         Ok(())
+    }
+}
+
+impl<C: ChannelValue> Color<C> for La<C> {
+    const CHANNELS: u8 = 2;
+
+    #[inline]
+    fn to_rgb(&self) -> Rgb<C> {
+        let &La([l, _]) = self;
+        Rgb([l, l, l])
+    }
+
+    #[inline]
+    fn to_rgba(&self) -> Rgba<C> {
+        let &La([l, a]) = self;
+        Rgba([l, l, l, a])
+    }
+
+    fn from_bytes(mut bytes: &[u8]) -> Option<Self> {
+        let Some(l) = C::from_bytes(bytes) else {
+            return None;
+        };
+        bytes = &bytes[C::SIZE as usize..];
+
+        let Some(a) = C::from_bytes(bytes) else {
+            return None;
+        };
+        
+        Some(La([l, a]))
+    }
+
+    #[inline]
+    fn channels(&self) -> &[C] {
+        &self.0
+    }
+
+    #[inline]
+    fn channels_mut(&mut self) -> &mut [C] {
+        &mut self.0
     }
 }
 
@@ -441,6 +484,29 @@ impl<T: ChannelValueFamily> ChannelVariant<T> {
     }
 }
 
+impl<T: ChannelValueFamily> Clone for ChannelVariant<T>
+where <T as ChannelValueFamily>::Data<u8>: Clone,
+      <T as ChannelValueFamily>::Data<u16>: Clone,
+      <T as ChannelValueFamily>::Data<u32>: Clone,
+      <T as ChannelValueFamily>::Data<u64>: Clone,
+      <T as ChannelValueFamily>::Data<u128>: Clone,
+      <T as ChannelValueFamily>::Data<f32>: Clone,
+      <T as ChannelValueFamily>::Data<f64>: Clone,
+{
+    #[inline]
+    fn clone(&self) -> Self {
+        match self {
+            ChannelVariant::U8(data)   => ChannelVariant::U8(data.clone()),
+            ChannelVariant::U16(data)  => ChannelVariant::U16(data.clone()),
+            ChannelVariant::U32(data)  => ChannelVariant::U32(data.clone()),
+            ChannelVariant::U64(data)  => ChannelVariant::U64(data.clone()),
+            ChannelVariant::U128(data) => ChannelVariant::U128(data.clone()),
+            ChannelVariant::F32(data)  => ChannelVariant::F32(data.clone()),
+            ChannelVariant::F64(data)  => ChannelVariant::F64(data.clone()),
+        }
+    }
+}
+
 pub trait ColorFamily<C: ChannelValue> {
     type Data<T> where T: Color<C>;
 }
@@ -448,6 +514,7 @@ pub trait ColorFamily<C: ChannelValue> {
 #[derive(Debug)]
 pub enum ColorVariant<C: ChannelValue, T: ColorFamily<C>> {
     L(T::Data<C>),
+    La(T::Data<La<C>>),
     Rgb(T::Data<Rgb<C>>),
     Rgba(T::Data<Rgba<C>>),
 }
@@ -457,8 +524,25 @@ impl<C: ChannelValue, T: ColorFamily<C>> ColorVariant<C, T> {
     pub fn color_type(&self) -> ColorType {
         match self {
             Self::L(_)    => ColorType::L,
+            Self::La(_)   => ColorType::La,
             Self::Rgb(_)  => ColorType::Rgb,
             Self::Rgba(_) => ColorType::Rgba,
+        }
+    }
+}
+
+impl<C: ChannelValue, T: ColorFamily<C>> Clone for ColorVariant<C, T>
+where <T as ColorFamily<C>>::Data<C>: Clone,
+      <T as ColorFamily<C>>::Data<La<C>>: Clone,
+      <T as ColorFamily<C>>::Data<Rgb<C>>: Clone,
+      <T as ColorFamily<C>>::Data<Rgba<C>>: Clone {
+    #[inline]
+    fn clone(&self) -> Self {
+        match self {
+            Self::L(data)    => Self::L(data.clone()),
+            Self::La(data)   => Self::La(data.clone()),
+            Self::Rgb(data)  => Self::Rgb(data.clone()),
+            Self::Rgba(data) => Self::Rgba(data.clone()),
         }
     }
 }
@@ -690,6 +774,7 @@ pub fn write_colors_variant(colors: &ColorList, planes: u8, writer: &mut impl Wr
 pub fn write_1bit_colors_variant_inner(colors: &ColorVariant<u8, ColorVecDataInner>, writer: &mut impl Write) -> std::io::Result<()> {
     match colors {
         ColorVariant::L   (colors) => write_1bit_colors(colors, writer),
+        ColorVariant::La  (colors) => write_1bit_colors(colors, writer),
         ColorVariant::Rgb (colors) => write_1bit_colors(colors, writer),
         ColorVariant::Rgba(colors) => write_1bit_colors(colors, writer),
     }
@@ -724,6 +809,7 @@ where Color: crate::color::Color<u8>
 pub fn write_4bit_colors_variant_inner(colors: &ColorVariant<u8, ColorVecDataInner>, writer: &mut impl Write) -> std::io::Result<()> {
     match colors {
         ColorVariant::L   (colors) => write_4bit_colors(colors, writer),
+        ColorVariant::La  (colors) => write_4bit_colors(colors, writer),
         ColorVariant::Rgb (colors) => write_4bit_colors(colors, writer),
         ColorVariant::Rgba(colors) => write_4bit_colors(colors, writer),
     }
@@ -759,6 +845,7 @@ where Color: crate::color::Color<u8>
 pub fn write_colors_variant_inner<C: crate::color::ChannelValue>(colors: &ColorVariant<C, ColorVecDataInner>, writer: &mut impl Write) -> std::io::Result<()> {
     match colors {
         ColorVariant::L   (colors) => write_colors(colors, writer),
+        ColorVariant::La  (colors) => write_colors(colors, writer),
         ColorVariant::Rgb (colors) => write_colors(colors, writer),
         ColorVariant::Rgba(colors) => write_colors(colors, writer),
     }
@@ -773,4 +860,79 @@ where ChannelValue: crate::color::ChannelValue,
         color.write_to(&mut writer)?;
     }
     Ok(())
+}
+
+pub trait ToUSize: Copy {
+    fn to_usize(self) -> usize;
+}
+
+impl ToUSize for u8 {
+    #[inline]
+    fn to_usize(self) -> usize {
+        self as usize
+    }
+}
+
+impl ToUSize for u16 {
+    #[inline]
+    fn to_usize(self) -> usize {
+        self as usize
+    }
+}
+
+impl ToUSize for u32 {
+    #[inline]
+    fn to_usize(self) -> usize {
+        self as usize
+    }
+}
+
+impl ToUSize for u64 {
+    #[inline]
+    fn to_usize(self) -> usize {
+        self as usize
+    }
+}
+
+impl ToUSize for u128 {
+    #[inline]
+    fn to_usize(self) -> usize {
+        self as usize
+    }
+}
+
+pub fn apply_palette<ChannelValue: self::ChannelValue, Color: self::Color<ChannelValue>>(img: &[impl ToUSize], palette: &[Color]) -> Vec<Color> {
+    let mut output = Vec::with_capacity(img.len());
+
+    for index in img {
+        let index = index.to_usize();
+        if let Some(color) = palette.get(index) {
+            output.push(color.clone());
+        } else {
+            output.push(Color::default());
+        }
+    }
+
+    output
+}
+
+pub fn apply_palette_variant_inner<C: ChannelValue>(img: &[impl ToUSize], palette: &ColorVariant<C, ColorVecDataInner>) -> ColorVariant<C, ColorVecDataInner> {
+    match palette {
+        ColorVariant::L   (palette) => ColorVariant::L   (apply_palette(img, &palette[..])),
+        ColorVariant::La  (palette) => ColorVariant::La  (apply_palette(img, &palette[..])),
+        ColorVariant::Rgb (palette) => ColorVariant::Rgb (apply_palette(img, &palette[..])),
+        ColorVariant::Rgba(palette) => ColorVariant::Rgba(apply_palette(img, &palette[..])),
+    }
+}
+
+pub fn apply_palette_variant(img: &[impl ToUSize], palette: &ColorList) -> ColorList {
+    match palette {
+        ChannelVariant::U8  (palette) => ChannelVariant::U8  (apply_palette_variant_inner(img, palette)),
+        ChannelVariant::U16 (palette) => ChannelVariant::U16 (apply_palette_variant_inner(img, palette)),
+        ChannelVariant::U32 (palette) => ChannelVariant::U32 (apply_palette_variant_inner(img, palette)),
+        ChannelVariant::U64 (palette) => ChannelVariant::U64 (apply_palette_variant_inner(img, palette)),
+        ChannelVariant::U128(palette) => ChannelVariant::U128(apply_palette_variant_inner(img, palette)),
+        ChannelVariant::F32 (palette) => ChannelVariant::F32 (apply_palette_variant_inner(img, palette)),
+        ChannelVariant::F64 (palette) => ChannelVariant::F64 (apply_palette_variant_inner(img, palette)),
+    }
 }

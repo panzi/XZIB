@@ -18,6 +18,11 @@ impl Body {
     }
 
     #[inline]
+    pub fn with_data(data: ColorList) -> Self {
+        Self { data }
+    }
+
+    #[inline]
     pub fn data(&self) -> &ColorList {
         &self.data
     }
@@ -42,12 +47,7 @@ impl Body {
     }
 
     pub fn write(&self, head: &Head, writer: &mut impl Write) -> Result<(), WriteError> {
-        let Some(channel_value_type) = ChannelValueType::from_planes(head.number_type(), head.planes()) else {
-            return Err(WriteError::with_message(
-                WriteErrorKind::InvalidParams,
-                format!("unsupported parameters for body colors: {} {}",
-                    head.number_type(), head.planes())));
-        };
+        let channel_value_type = ChannelValueType::from_planes(head.number_type(), head.planes())?;
 
         let data_channel_value_type = self.data.channel_value_type();
         if head.is_interleaved() {
@@ -142,6 +142,7 @@ pub fn write_interleaved_colors_varant(data: &ColorList, head: &Head, writer: &m
 pub fn write_interleaved_float_colors_variant_inner<C: ChannelValue>(data: &ColorVariant<C, ColorVecDataInner>, head: &Head, writer: &mut impl Write) -> Result<(), WriteError> {
     match data {
         ColorVariant::L   (data) => write_interleaved_float_colors(data, head, writer)?,
+        ColorVariant::La  (data) => write_interleaved_float_colors(data, head, writer)?,
         ColorVariant::Rgb (data) => write_interleaved_float_colors(data, head, writer)?,
         ColorVariant::Rgba(data) => write_interleaved_float_colors(data, head, writer)?,
     }
@@ -207,6 +208,7 @@ where ChannelValue: crate::color::ChannelValue,
 pub fn write_interleaved_int_colors_variant_inner<C: IntChannelValue>(data: &ColorVariant<C, ColorVecDataInner>, head: &Head, writer: &mut impl Write) -> Result<(), WriteError> {
     match data {
         ColorVariant::L   (data) => write_interleaved_int_colors(data, head, writer)?,
+        ColorVariant::La  (data) => write_interleaved_int_colors(data, head, writer)?,
         ColorVariant::Rgb (data) => write_interleaved_int_colors(data, head, writer)?,
         ColorVariant::Rgba(data) => write_interleaved_int_colors(data, head, writer)?,
     }

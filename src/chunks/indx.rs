@@ -37,12 +37,7 @@ impl Indx {
     }
 
     pub fn write(&self, head: &Head, writer: &mut impl Write) -> Result<(), WriteError> {
-        let Some(channel_value_type) = ChannelValueType::from_planes(head.number_type(), head.index_planes()) else {
-            return Err(WriteError::with_message(
-                WriteErrorKind::InvalidParams,
-                format!("unsupported parameters for index colors: {} {}",
-                    head.number_type(), head.index_planes())));
-        };
+        let channel_value_type = ChannelValueType::from_planes(head.number_type(), head.index_planes())?;
 
         if self.colors.channel_value_type() != channel_value_type {
             return Err(WriteError::with_message(
