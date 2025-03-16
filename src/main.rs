@@ -45,7 +45,7 @@ enum Command {
 
 make_error! {
     CliError
-    CliErrorKind {
+    enum CliErrorKind {
         IO,
         Image,
         InvalidParams,
