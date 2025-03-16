@@ -862,52 +862,16 @@ where ChannelValue: crate::color::ChannelValue,
     Ok(())
 }
 
-pub trait ToUSize: Copy {
-    fn to_usize(self) -> usize;
-}
-
-impl ToUSize for u8 {
-    #[inline]
-    fn to_usize(self) -> usize {
-        self as usize
-    }
-}
-
-impl ToUSize for u16 {
-    #[inline]
-    fn to_usize(self) -> usize {
-        self as usize
-    }
-}
-
-impl ToUSize for u32 {
-    #[inline]
-    fn to_usize(self) -> usize {
-        self as usize
-    }
-}
-
-impl ToUSize for u64 {
-    #[inline]
-    fn to_usize(self) -> usize {
-        self as usize
-    }
-}
-
-impl ToUSize for u128 {
-    #[inline]
-    fn to_usize(self) -> usize {
-        self as usize
-    }
-}
-
-pub fn apply_palette<ChannelValue: self::ChannelValue, Color: self::Color<ChannelValue>>(img: &[impl ToUSize], palette: &[Color]) -> Vec<Color> {
+pub fn apply_palette<ChannelValue: self::ChannelValue, Color: self::Color<ChannelValue>>(img: &[impl TryInto<usize> + Copy], palette: &[Color]) -> Vec<Color> {
     let mut output = Vec::with_capacity(img.len());
 
     for index in img {
-        let index = index.to_usize();
-        if let Some(color) = palette.get(index) {
-            output.push(color.clone());
+        if let Ok(index) = TryInto::<usize>::try_into(*index) {
+            if let Some(color) = palette.get(index) {
+                output.push(color.clone());
+            } else {
+                output.push(Color::default());
+            }
         } else {
             output.push(Color::default());
         }
@@ -916,7 +880,7 @@ pub fn apply_palette<ChannelValue: self::ChannelValue, Color: self::Color<Channe
     output
 }
 
-pub fn apply_palette_variant_inner<C: ChannelValue>(img: &[impl ToUSize], palette: &ColorVariant<C, ColorVecDataInner>) -> ColorVariant<C, ColorVecDataInner> {
+pub fn apply_palette_variant_inner<C: ChannelValue>(img: &[impl TryInto<usize> + Copy], palette: &ColorVariant<C, ColorVecDataInner>) -> ColorVariant<C, ColorVecDataInner> {
     match palette {
         ColorVariant::L   (palette) => ColorVariant::L   (apply_palette(img, &palette[..])),
         ColorVariant::La  (palette) => ColorVariant::La  (apply_palette(img, &palette[..])),
@@ -925,7 +889,7 @@ pub fn apply_palette_variant_inner<C: ChannelValue>(img: &[impl ToUSize], palett
     }
 }
 
-pub fn apply_palette_variant(img: &[impl ToUSize], palette: &ColorList) -> ColorList {
+pub fn apply_palette_variant(img: &[impl TryInto<usize> + Copy], palette: &ColorList) -> ColorList {
     match palette {
         ChannelVariant::U8  (palette) => ChannelVariant::U8  (apply_palette_variant_inner(img, palette)),
         ChannelVariant::U16 (palette) => ChannelVariant::U16 (apply_palette_variant_inner(img, palette)),
