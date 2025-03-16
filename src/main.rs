@@ -191,8 +191,6 @@ pub fn main() -> Result<(), CliError> {
                     "file has no BODY chunk"));
             };
 
-            // XXX: resolve indexed image!
-
             let img = match input_img.as_ref() {
                 ChannelVariant::U8(data) => {
                     match data {
@@ -223,8 +221,6 @@ pub fn main() -> Result<(), CliError> {
                 &mut BufWriter::new(File::create(&output)?),
                 image::ImageFormat::from_path(&output).unwrap_or(image::ImageFormat::Png)
             )?;
-
-            todo!()
         }
         Command::Info { files } => {
             for file in &files {
@@ -321,11 +317,7 @@ pub fn main() -> Result<(), CliError> {
                         eprintln!("Error opening file: {err}");
                     }
                 }
-
             }
-
-
-            todo!()
         }
     }
     
