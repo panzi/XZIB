@@ -110,7 +110,7 @@ impl std::fmt::Display for ChecksumType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Foot {
     checksum: Checksum,
 }

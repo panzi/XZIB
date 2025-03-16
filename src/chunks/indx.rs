@@ -4,7 +4,7 @@ use crate::{color::{read_colors_variant, write_colors_variant, ColorList}, error
 
 use super::ChunkWrite;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Indx {
     colors: ColorList
 }

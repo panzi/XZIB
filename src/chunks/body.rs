@@ -4,7 +4,7 @@ use crate::{color::{read_colors_variant, write_colors_variant, ChannelValue, Cha
 
 use super::ChunkWrite;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Body {
     data: ColorList
 }
@@ -25,6 +25,11 @@ impl Body {
     #[inline]
     pub fn data(&self) -> &ColorList {
         &self.data
+    }
+
+    #[inline]
+    pub fn into_data(self) -> ColorList {
+        self.data
     }
 
     #[inline]

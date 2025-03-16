@@ -13,7 +13,7 @@ use flate2::{bufread::ZlibDecoder, write::ZlibEncoder, Compression};
 use format::{ChannelValueType, ColorType, Format, NumberType};
 use io::{read_fourcc, read_u32, read_u64, read_u8};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Head {
     flags: u8,
     channels: u8,
@@ -271,6 +271,11 @@ impl XZIB {
     }
 
     #[inline]
+    pub fn into_body(self) -> Option<Body> {
+        self.body
+    }
+
+    #[inline]
     pub fn meta_mut(&mut self) -> &mut Option<Meta> {
         &mut self.meta
     }
@@ -290,7 +295,7 @@ impl XZIB {
         &mut self.foot
     }
 
-    pub fn image_buffer(&self) -> Option<Cow<ColorList>> {
+    pub fn image_data(&self) -> Option<Cow<ColorList>> {
         let Some(body) = &self.body else {
             return None;
         };
@@ -329,6 +334,47 @@ impl XZIB {
         }
 
         Some(Cow::Borrowed(data))
+    }
+
+    pub fn into_image_data(self) -> Option<ColorList> {
+        let Some(body) = self.body else {
+            return None;
+        };
+
+        let data = body.into_data();
+
+        if let Some(indx) = self.indx {
+            match &data {
+                ChannelVariant::U8(data) => {
+                    if let ColorVariant::L(data) = data {
+                        return Some(apply_palette_variant(data, indx.colors()))
+                    }
+                }
+                ChannelVariant::U16(data) => {
+                    if let ColorVariant::L(data) = data {
+                        return Some(apply_palette_variant(data, indx.colors()))
+                    }
+                }
+                ChannelVariant::U32(data) => {
+                    if let ColorVariant::L(data) = data {
+                        return Some(apply_palette_variant(data, indx.colors()))
+                    }
+                }
+                ChannelVariant::U64(data) => {
+                    if let ColorVariant::L(data) = data {
+                        return Some(apply_palette_variant(data, indx.colors()))
+                    }
+                }
+                ChannelVariant::U128(data) => {
+                    if let ColorVariant::L(data) = data {
+                        return Some(apply_palette_variant(data, indx.colors()))
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Some(data)
     }
 
     pub fn read<R>(reader: &mut R) -> Result<Self, ReadError>

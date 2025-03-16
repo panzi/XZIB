@@ -14,6 +14,7 @@ macro_rules! make_error {
     };
 
     (@declare $error_name:ident; struct $inner_name:ident $({ $($field:ident: $field_type:ident $(:: $field_type_tail:ident)*),* $(,)? })? $(enum $kind_name:ident $(impl $impl_kind_value:ident : $err_head:ident $(:: $err_tail:ident)*; )*)?) => {
+        // Fields are put into boxed inner struct, so that the Result will only have one pointer size data for the error case.
         #[derive(Debug)]
         struct $inner_name {
             $(

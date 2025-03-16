@@ -24,7 +24,8 @@ where Self: Sized,
     const BITS: u32 = Self::SIZE * 8;
 
     fn from_bytes(bytes: &[u8]) -> Option<Self>;
-    fn write_to(&self, writer: impl Write) -> std::io::Result<()>;
+    fn write_to(self, writer: impl Write) -> std::io::Result<()>;
+    fn as_f32(self) -> f32;
 }
 
 pub trait IntChannelValue
@@ -74,8 +75,13 @@ impl ChannelValue for u8 {
     }
 
     #[inline]
-    fn write_to(&self, mut writer: impl Write) -> std::io::Result<()> {
+    fn write_to(self, mut writer: impl Write) -> std::io::Result<()> {
         writer.write_all(&self.to_le_bytes())
+    }
+
+    #[inline]
+    fn as_f32(self) -> f32 {
+        self as f32 / Self::MAX as f32
     }
 }
 
@@ -93,8 +99,13 @@ impl ChannelValue for u16 {
     }
 
     #[inline]
-    fn write_to(&self, mut writer: impl Write) -> std::io::Result<()> {
+    fn write_to(self, mut writer: impl Write) -> std::io::Result<()> {
         writer.write_all(&self.to_le_bytes())
+    }
+
+    #[inline]
+    fn as_f32(self) -> f32 {
+        self as f32 / Self::MAX as f32
     }
 }
 
@@ -112,8 +123,13 @@ impl ChannelValue for u32 {
     }
 
     #[inline]
-    fn write_to(&self, mut writer: impl Write) -> std::io::Result<()> {
+    fn write_to(self, mut writer: impl Write) -> std::io::Result<()> {
         writer.write_all(&self.to_le_bytes())
+    }
+
+    #[inline]
+    fn as_f32(self) -> f32 {
+        self as f32 / Self::MAX as f32
     }
 }
 
@@ -131,8 +147,13 @@ impl ChannelValue for u64 {
     }
 
     #[inline]
-    fn write_to(&self, mut writer: impl Write) -> std::io::Result<()> {
+    fn write_to(self, mut writer: impl Write) -> std::io::Result<()> {
         writer.write_all(&self.to_le_bytes())
+    }
+
+    #[inline]
+    fn as_f32(self) -> f32 {
+        self as f32 / Self::MAX as f32
     }
 }
 
@@ -150,8 +171,13 @@ impl ChannelValue for u128 {
     }
 
     #[inline]
-    fn write_to(&self, mut writer: impl Write) -> std::io::Result<()> {
+    fn write_to(self, mut writer: impl Write) -> std::io::Result<()> {
         writer.write_all(&self.to_le_bytes())
+    }
+
+    #[inline]
+    fn as_f32(self) -> f32 {
+        self as f32 / Self::MAX as f32
     }
 }
 
@@ -240,8 +266,13 @@ impl ChannelValue for f32 {
     }
 
     #[inline]
-    fn write_to(&self, mut writer: impl Write) -> std::io::Result<()> {
+    fn write_to(self, mut writer: impl Write) -> std::io::Result<()> {
         writer.write_all(&self.to_le_bytes())
+    }
+
+    #[inline]
+    fn as_f32(self) -> f32 {
+        self
     }
 }
 
@@ -259,8 +290,13 @@ impl ChannelValue for f64 {
     }
 
     #[inline]
-    fn write_to(&self, mut writer: impl Write) -> std::io::Result<()> {
+    fn write_to(self, mut writer: impl Write) -> std::io::Result<()> {
         writer.write_all(&self.to_le_bytes())
+    }
+
+    #[inline]
+    fn as_f32(self) -> f32 {
+        self as f32
     }
 }
 
@@ -268,13 +304,34 @@ impl ChannelValue for f64 {
 #[repr(transparent)]
 pub struct La<C: ChannelValue>(pub [C; 2]);
 
+impl<C: ChannelValue> From<La<C>> for [C; 2] {
+    #[inline]
+    fn from(value: La<C>) -> Self {
+        value.0
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct Rgb<C: ChannelValue>(pub [C; 3]);
 
+impl<C: ChannelValue> From<Rgb<C>> for [C; 3] {
+    #[inline]
+    fn from(value: Rgb<C>) -> Self {
+        value.0
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[repr(transparent)]
 pub struct Rgba<C: ChannelValue>(pub [C; 4]);
+
+impl<C: ChannelValue> From<Rgba<C>> for [C; 4] {
+    #[inline]
+    fn from(value: Rgba<C>) -> Self {
+        value.0
+    }
+}
 
 pub trait Color<C: ChannelValue>: std::fmt::Debug + Sized + Default + Clone {
     const CHANNELS: u8;
@@ -287,7 +344,7 @@ pub trait Color<C: ChannelValue>: std::fmt::Debug + Sized + Default + Clone {
 
     #[inline]
     fn write_to(&self, mut writer: impl Write) -> std::io::Result<()> {
-        for channel in self.channels() {
+        for &channel in self.channels() {
             channel.write_to(&mut writer)?;
         }
 

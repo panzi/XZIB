@@ -6,7 +6,7 @@ use crate::{error::{ReadError, ReadErrorKind, WriteError}, Head};
 use super::ChunkWrite;
 
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Xmet {
     data: HashMap<String, Vec<String>>,
 }

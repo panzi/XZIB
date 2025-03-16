@@ -38,7 +38,7 @@ impl TryFrom<u8> for MetaKey {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Meta {
     title: String,
     created_at: Date,

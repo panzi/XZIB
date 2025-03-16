@@ -2,7 +2,7 @@ use std::{fs::File, io::{BufReader, BufWriter}, path::PathBuf};
 
 use clap::{Parser, Subcommand};
 
-use xzib::{chunks::Body, color::{ChannelVariant, ColorList, ColorVariant, La, Rgb, Rgba}, make_error, XZIB};
+use xzib::{chunks::Body, color::{ChannelValue, ChannelVariant, ColorList, ColorVariant, La, Rgb, Rgba}, make_error, XZIB};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -184,32 +184,184 @@ pub fn main() -> Result<(), CliError> {
         }
         Command::Decode { input, output } => {
             let xzib = XZIB::read(&mut BufReader::new(File::open(input)?))?;
-            let head = xzib.head();
+            let width = xzib.head().width();
+            let height = xzib.head().height();
 
-            let Some(input_img) = xzib.image_buffer() else {
+            let Some(input_img) = xzib.into_image_data() else {
                 return Err(CliError::with_message(
                     CliErrorKind::ReadError,
                     "file has no BODY chunk"));
             };
 
-            let img = match input_img.as_ref() {
+            let img: Option<image::DynamicImage> = match input_img {
                 ChannelVariant::U8(data) => {
                     match data {
                         ColorVariant::L(data) => {
-                            image::ImageBuffer::<image::Luma<u8>, &[u8]>::from_raw(
-                                head.width(), head.height(), &data[..])
+                            image::ImageBuffer::from_raw(
+                                width, height, data
+                            ).map(|img| image::DynamicImage::ImageLuma8(img))
                         }
-                        ColorVariant::La(data) => { todo!() }
-                        ColorVariant::Rgb(data) => { todo!() }
-                        ColorVariant::Rgba(data) => { todo!() }
+                        ColorVariant::La(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|La(color)| color).collect()
+                            ).map(|img| image::DynamicImage::ImageLumaA8(img))
+                        }
+                        ColorVariant::Rgb(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|Rgb(color)| color).collect()
+                            ).map(|img| image::DynamicImage::ImageRgb8(img))
+                        }
+                        ColorVariant::Rgba(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|Rgba(color)| color).collect()
+                            ).map(|img| image::DynamicImage::ImageRgba8(img))
+                        }
                     }
                 }
-                ChannelVariant::U16(data) => { todo!() }
-                ChannelVariant::U32(data) => { todo!() }
-                ChannelVariant::U64(data) => { todo!() }
-                ChannelVariant::U128(data) => { todo!() }
-                ChannelVariant::F32(data) => { todo!() }
-                ChannelVariant::F64(data) => { todo!() }
+                ChannelVariant::U16(data) => {
+                    match data {
+                        ColorVariant::L(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data
+                            ).map(|img| image::DynamicImage::ImageLuma16(img))
+                        }
+                        ColorVariant::La(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|La(color)| color).collect()
+                            ).map(|img| image::DynamicImage::ImageLumaA16(img))
+                        }
+                        ColorVariant::Rgb(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|Rgb(color)| color).collect()
+                            ).map(|img| image::DynamicImage::ImageRgb16(img))
+                        }
+                        ColorVariant::Rgba(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|Rgba(color)| color).collect()
+                            ).map(|img| image::DynamicImage::ImageRgba16(img))
+                        }
+                    }
+                }
+                ChannelVariant::U32(data) => {
+                    match data {
+                        ColorVariant::L(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|l| { let l = l.as_f32(); [l, l, l] }).collect()
+                            ).map(|img| image::DynamicImage::ImageRgb32F(img))
+                        }
+                        ColorVariant::La(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|La([l, a])| { let l = l.as_f32(); [l, l, l, a.as_f32()] }).collect()
+                            ).map(|img| image::DynamicImage::ImageRgba32F(img))
+                        }
+                        ColorVariant::Rgb(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|Rgb(color)| color.map(ChannelValue::as_f32)).collect()
+                            ).map(|img| image::DynamicImage::ImageRgb32F(img))
+                        }
+                        ColorVariant::Rgba(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|Rgba(color)| color.map(ChannelValue::as_f32)).collect()
+                            ).map(|img| image::DynamicImage::ImageRgba32F(img))
+                        }
+                    }
+                }
+                ChannelVariant::U64(data) => {
+                    match data {
+                        ColorVariant::L(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|l| { let l = l.as_f32(); [l, l, l] }).collect()
+                            ).map(|img| image::DynamicImage::ImageRgb32F(img))
+                        }
+                        ColorVariant::La(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|La([l, a])| { let l = l.as_f32(); [l, l, l, a.as_f32()] }).collect()
+                            ).map(|img| image::DynamicImage::ImageRgba32F(img))
+                        }
+                        ColorVariant::Rgb(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|Rgb(color)| color.map(ChannelValue::as_f32)).collect()
+                            ).map(|img| image::DynamicImage::ImageRgb32F(img))
+                        }
+                        ColorVariant::Rgba(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|Rgba(color)| color.map(ChannelValue::as_f32)).collect()
+                            ).map(|img| image::DynamicImage::ImageRgba32F(img))
+                        }
+                    }
+                }
+                ChannelVariant::U128(data) => {
+                    match data {
+                        ColorVariant::L(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|l| { let l = l.as_f32(); [l, l, l] }).collect()
+                            ).map(|img| image::DynamicImage::ImageRgb32F(img))
+                        }
+                        ColorVariant::La(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|La([l, a])| { let l = l.as_f32(); [l, l, l, a.as_f32()] }).collect()
+                            ).map(|img| image::DynamicImage::ImageRgba32F(img))
+                        }
+                        ColorVariant::Rgb(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|Rgb(color)| color.map(ChannelValue::as_f32)).collect()
+                            ).map(|img| image::DynamicImage::ImageRgb32F(img))
+                        }
+                        ColorVariant::Rgba(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|Rgba(color)| color.map(ChannelValue::as_f32)).collect()
+                            ).map(|img| image::DynamicImage::ImageRgba32F(img))
+                        }
+                    }
+                }
+                ChannelVariant::F32(data) => {
+                    match data {
+                        ColorVariant::L(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|l| [l, l, l]).collect()
+                            ).map(|img| image::DynamicImage::ImageRgb32F(img))
+                        }
+                        ColorVariant::La(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|La([l, a])| [l, l, l, a]).collect()
+                            ).map(|img| image::DynamicImage::ImageRgba32F(img))
+                        }
+                        ColorVariant::Rgb(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|Rgb(color)| color).collect()
+                            ).map(|img| image::DynamicImage::ImageRgb32F(img))
+                        }
+                        ColorVariant::Rgba(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|Rgba(color)| color).collect()
+                            ).map(|img| image::DynamicImage::ImageRgba32F(img))
+                        }
+                    }
+                }
+                ChannelVariant::F64(data) => {
+                    match data {
+                        ColorVariant::L(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|l| [l as f32, l as f32, l as f32]).collect()
+                            ).map(|img| image::DynamicImage::ImageRgb32F(img))
+                        }
+                        ColorVariant::La(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|La([l, a])| [l as f32, l as f32, l as f32, a as f32]).collect()
+                            ).map(|img| image::DynamicImage::ImageRgba32F(img))
+                        }
+                        ColorVariant::Rgb(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|Rgb(color)| color.map(|v| v as f32)).collect()
+                            ).map(|img| image::DynamicImage::ImageRgb32F(img))
+                        }
+                        ColorVariant::Rgba(data) => {
+                            image::ImageBuffer::from_raw(
+                                width, height, data.into_iter().flat_map(|Rgba(color)| color.map(|v| v as f32)).collect()
+                            ).map(|img| image::DynamicImage::ImageRgba32F(img))
+                        }
+                    }
+                }
             };
 
             let Some(img) = img else {
@@ -225,7 +377,7 @@ pub fn main() -> Result<(), CliError> {
         }
         Command::Info { files } => {
             for file in &files {
-                println!("file: {:?}", file);
+                println!("FILE: {:?}", file);
 
                 match File::open(file) {
                     Ok(fp) => {
@@ -233,12 +385,12 @@ pub fn main() -> Result<(), CliError> {
                             Ok(xzib) => {
                                 let header = xzib.head();
 
-                                println!("dimensions: {} x {}", header.width(), header.height());
-                                println!("number type: {}", header.number_type());
-                                println!("channels: {}", header.channels());
-                                println!("bit planes: {}", header.planes());
-                                println!("index bit planes: {}", header.index_planes());
-                                println!("interleaved: {}", header.is_interleaved());
+                                println!("dimensions:       {} x {}", header.width(), header.height());
+                                println!("number type:      {}", header.number_type());
+                                println!("channels:         {:3}", header.channels());
+                                println!("bit planes:       {:3}", header.planes());
+                                println!("index bit planes: {:3}", header.index_planes());
+                                println!("interleaved:      {}", header.is_interleaved());
 
                                 if let Some(meta) = xzib.meta() {
                                     println!();
