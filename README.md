@@ -21,10 +21,8 @@ Types:
 | `U32`  |    4 | Unsigned 32-bit integer. |
 | `U64`  |    8 | Unsigned 64-bit integer. |
 | `U128` |   16 | Unsigned 128-bit integer. |
-| `F16`  |    2 | 16-bit floating point number. |
 | `F32`  |    4 | 32-bit floating point number. |
 | `F64`  |    8 | 64-bit floating point number. |
-| `F128` |   16 | 128-bit floating point number. |
 | `ZSTR` |   >1 | A NUL (zero) terminated UTF-8 string. |
 
 Basic layout:
@@ -53,7 +51,7 @@ There has to be exactly one `body` chunk.
 |      0 | `U8[4]` | `file_magic` | `"XZIB"`    |
 |      4 | `U8`    | `flags`      | bit 1 ... interleaved<br>bit 2 ... floating-point |
 |      5 | `U8`    | `channels`   | Supported values: 1, 3, 4 |
-|      6 | `U8`    | `planes`     | Number of planes in interleaved format or number of bits per unit (channel or index value) otherwise.<br>Supported values:<br>Integer:<ul><li>interleaved: 1 ... 8, 16, 32, 64, 128</li><li>non-interleaved: 1, 4, 8, 16, 32, 64, 128</li></ul>Floating-point: 16, 32, 64, 128<br>Indexed: 1 ... 255 |
+|      6 | `U8`    | `planes`     | Number of planes in interleaved format or number of bits per unit (channel or index value) otherwise.<br>Supported values:<br>Integer:<ul><li>interleaved: 1 ... 8, 16, 32, 64, 128</li><li>non-interleaved: 1, 4, 8, 16, 32, 64, 128</li></ul>Floating-point: 32, 64<br>Indexed: 1 ... 128 |
 |      7 | `U8`    | `index_planes` | `0` means not indexed. Otherwise: 8, 16, 32, 64, 128 |
 |      8 | `U32`   | `width`      | The width of the image in pixels. |
 |     12 | `U32`   | `height`     | The height of the image in pixels. |
